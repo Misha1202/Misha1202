@@ -688,90 +688,81 @@
         }
 
         // Функция загрузки данных из файла
-        function loadData() {
-            const fileInput = document.getElementById('file-input');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                alert("Выберите файл для загрузки");
-                return;
-            }
-            
-            setLoading(true);
-            
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                try {
-                    const data = e.target.result;
-                    let workbook;
-                    
-                    if (file.name.endsWith('.csv')) {
-                        workbook = XLSX.read(data, { type: 'string' });
-                    } else {
-                        workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
-                    }
-                    
-                    // Преобразование в JSON с обработкой возможных ошибок
-                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                    let jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                    
-                    // Создаем глубокую копию данных, чтобы избежать проблем с readonly
-                    jsonData = JSON.parse(JSON.stringify(jsonData));
-                    
-                    // Проверка обязательных полей
-                    const requiredFields = ["place_cod", "Паллет", "Баркод"];
-                    const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
-                    const missingFields = requiredFields.filter(field => !(field in sampleItem));
-                    
-                    if (missingFields.length > 0) {
-                        alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    // Обработка данных
-                    const processedData = jsonData.map(item => {
-                        // Создаем новый объект для каждого элемента
-                        const newItem = {
-                            place_cod: item.place_cod || "",
-                            Паллет: item.Паллет || "",
-                            Баркод: item.Баркод || "",
-                            Статус: item.Статус || "Новый",
-                            Дата: item.Дата || formatDate(new Date()),
-                            Причина: item.Причина || ""
-                        };
-                        return newItem;
-                    });
-                    
-                    // Присваиваем обработанные данные
-                    data = processedData;
-                    loadModal.style.display = 'none';
-                    fileInput.value = '';
-                    updateStatus(`Загружено ${data.length} записей`);
-                    saveDataToLocalStorage();
-                    searchData();
-                    
-                } catch (e) {
-                    alert(`Ошибка при загрузке файла: ${e.message}`);
-                    console.error(e);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            
-            reader.onerror = function() {
-                alert("Ошибка при чтении файла");
-                setLoading(false);
-            };
-            
-            if (file.name.endsWith('.csv')) {
-                reader.readAsText(file);
-            } else {
-                reader.readAsArrayBuffer(file);
-            }
-        }
+       function loadData() {
+    const fileInput = document.getElementById('file-input');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert("Выберите файл для загрузки");
+        return;
+    }
 
+    setLoading(true);
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const data = e.target.result;
+            let workbook;
+
+            // 1. Чтение файла
+            if (file.name.endsWith('.csv')) {
+                workbook = XLSX.read(data, { type: 'string', raw: true });
+            } else {
+                workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+            }
+
+            // 2. Преобразование в JSON с дефолтными значениями
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+            // 3. Создаем глубокую копию данных (обход readonly)
+            const processedData = jsonData.map(item => {
+                return {
+                    place_cod: String(item.place_cod || ""),
+                    Паллет: String(item.Паллет || ""),
+                    Баркод: String(item.Баркод || ""),
+                    Статус: String(item.Статус || "Новый"),
+                    Дата: String(item.Дата || formatDate(new Date())),
+                    Причина: String(item.Причина || "")
+                };
+            });
+
+            // 4. Проверка обязательных полей
+            const requiredFields = ["place_cod", "Паллет", "Баркод"];
+            if (processedData.length > 0) {
+                const missingFields = requiredFields.filter(field => !processedData[0].hasOwnProperty(field));
+                if (missingFields.length > 0) {
+                    throw new Error(`Отсутствуют поля: ${missingFields.join(', ')}`);
+                }
+            }
+
+            data = processedData;
+            updateStatus(`Загружено ${data.length} записей`);
+            saveDataToLocalStorage();
+
+        } catch (e) {
+            alert(`Ошибка при загрузке: ${e.message}`);
+            console.error(e);
+        } finally {
+            setLoading(false);
+            loadModal.style.display = 'none';
+            fileInput.value = '';
+        }
+    };
+
+    reader.onerror = () => {
+        alert("Ошибка чтения файла");
+        setLoading(false);
+    };
+
+    if (file.name.endsWith('.csv')) {
+        reader.readAsText(file);
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
+}
         // Функция сохранения данных в файл
         function saveData() {
             if (data.length === 0) {
