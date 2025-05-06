@@ -648,81 +648,89 @@
         }
 
         // Функция загрузки данных из файла
-        function loadData() {
-            const fileInput = document.getElementById('file-input');
-            const file = fileInput.files[0];
+function loadData() {
+    const fileInput = document.getElementById('file-input');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert("Выберите файл для загрузки");
+        return;
+    }
+    
+    setLoading(true);
+    
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            const data = e.target.result;
+            let workbook;
             
-            if (!file) {
-                alert("Выберите файл для загрузки");
+            if (file.name.endsWith('.csv')) {
+                workbook = XLSX.read(data, { type: 'string' });
+            } else {
+                workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+            }
+            
+            // Преобразование в JSON с обработкой возможных ошибок
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            let jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+            
+            // Создаем глубокую копию данных, чтобы избежать проблем с readonly
+            jsonData = JSON.parse(JSON.stringify(jsonData));
+            
+            // Проверка обязательных полей
+            const requiredFields = ["place_cod", "Паллет", "Баркод"];
+            const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
+            const missingFields = requiredFields.filter(field => !(field in sampleItem));
+            
+            if (missingFields.length > 0) {
+                alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
+                setLoading(false);
                 return;
             }
             
-            setLoading(true);
+            // Обработка данных
+            const processedData = jsonData.map(item => {
+                // Создаем новый объект для каждого элемента
+                const newItem = {
+                    place_cod: item.place_cod || "",
+                    Паллет: item.Паллет || "",
+                    Баркод: item.Баркод || "",
+                    Статус: item.Статус || "Новый",
+                    Дата: item.Дата || formatDate(new Date()),
+                    Причина: item.Причина || ""
+                };
+                return newItem;
+            });
             
-            const reader = new FileReader();
+            // Присваиваем обработанные данные
+            data = processedData;
+            loadModal.style.display = 'none';
+            fileInput.value = '';
+            updateStatus(`Загружено ${data.length} записей`);
+            saveDataToLocalStorage();
+            searchData();
             
-            reader.onload = function(e) {
-                try {
-                    const data = e.target.result;
-                    let workbook;
-                    
-                    if (file.name.endsWith('.csv')) {
-                        // Чтение CSV файла
-                        workbook = XLSX.read(data, { type: 'binary', raw: true });
-                    } else {
-                        // Чтение Excel файла
-                        workbook = XLSX.read(data, { type: 'array' });
-                    }
-                    
-                    // Преобразование первой страницы в JSON
-                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-                    
-                    // Проверка обязательных полей
-                    const requiredFields = ["place_cod", "Паллет", "Баркод"];
-                    const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
-                    const missingFields = requiredFields.filter(field => !(field in sampleItem));
-                    
-                    if (missingFields.length > 0) {
-                        alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    // Добавление недостающих полей
-                    const processedData = jsonData.map(item => {
-                        if (!('Статус' in item)) item.Статус = 'Новый';
-                        if (!('Дата' in item)) item.Дата = formatDate(new Date());
-                        if (!('Причина' in item)) item.Причина = '';
-                        return item;
-                    });
-                    
-                    data = processedData;
-                    loadModal.style.display = 'none';
-                    fileInput.value = '';
-                    updateStatus(`Загружено ${data.length} записей`);
-                    saveDataToLocalStorage();
-                    searchData();
-                    
-                } catch (e) {
-                    alert(`Ошибка при загрузке файла: ${e.message}`);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            
-            reader.onerror = function() {
-                alert("Ошибка при чтении файла");
-                setLoading(false);
-            };
-            
-            if (file.name.endsWith('.csv')) {
-                reader.readAsText(file);
-            } else {
-                reader.readAsArrayBuffer(file);
-            }
+        } catch (e) {
+            alert(`Ошибка при загрузке файла: ${e.message}`);
+            console.error(e);
+        } finally {
+            setLoading(false);
         }
-
+    };
+    
+    reader.onerror = function() {
+        alert("Ошибка при чтении файла");
+        setLoading(false);
+    };
+    
+    if (file.name.endsWith('.csv')) {
+        reader.readAsText(file);
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
+}
         // Функция сохранения данных в файл
         function saveData() {
             if (data.length === 0) {
