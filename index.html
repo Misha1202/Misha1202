@@ -3,10 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканер паллет (Web-версия)</title>
+    <title>Сканер паллет (Офлайн-версия)</title>
     <!-- Библиотеки для работы с Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Service Worker для офлайн-работы -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => console.log('SW registered'))
+                    .catch(err => console.log('SW registration failed: ', err));
+            });
+        }
+    </script>
     <style>
         :root {
             --primary-color: #4285f4;
@@ -333,6 +343,19 @@
             align-items: center;
             justify-content: center;
         }
+        
+        .offline-message {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #ff9800;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -451,10 +474,27 @@
         </div>
     </div>
 
+    <!-- Офлайн-уведомление -->
+    <div class="offline-message" id="offline-message">Работаем в офлайн-режиме</div>
+
     <script>
         // Инициализация данных
         let data = [];
         let currentRecord = null;
+
+        // Проверка соединения
+        function updateOnlineStatus() {
+            const offlineMessage = document.getElementById('offline-message');
+            if (navigator.onLine) {
+                offlineMessage.style.display = 'none';
+            } else {
+                offlineMessage.style.display = 'block';
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
 
         // Элементы DOM
         const searchInput = document.getElementById('search-input');
@@ -508,7 +548,7 @@
 
         // Функция извлечения цифр из строки
         function extractDigits(text) {
-            return text.replace(/\D/g, '');
+            return text ? text.toString().replace(/\D/g, '') : '';
         }
 
         // Функция поиска данных
@@ -648,89 +688,90 @@
         }
 
         // Функция загрузки данных из файла
-function loadData() {
-    const fileInput = document.getElementById('file-input');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert("Выберите файл для загрузки");
-        return;
-    }
-    
-    setLoading(true);
-    
-    const reader = new FileReader();
-    
-    reader.onload = function(e) {
-        try {
-            const data = e.target.result;
-            let workbook;
+        function loadData() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
             
-            if (file.name.endsWith('.csv')) {
-                workbook = XLSX.read(data, { type: 'string' });
-            } else {
-                workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
-            }
-            
-            // Преобразование в JSON с обработкой возможных ошибок
-            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            let jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-            
-            // Создаем глубокую копию данных, чтобы избежать проблем с readonly
-            jsonData = JSON.parse(JSON.stringify(jsonData));
-            
-            // Проверка обязательных полей
-            const requiredFields = ["place_cod", "Паллет", "Баркод"];
-            const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
-            const missingFields = requiredFields.filter(field => !(field in sampleItem));
-            
-            if (missingFields.length > 0) {
-                alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
-                setLoading(false);
+            if (!file) {
+                alert("Выберите файл для загрузки");
                 return;
             }
             
-            // Обработка данных
-            const processedData = jsonData.map(item => {
-                // Создаем новый объект для каждого элемента
-                const newItem = {
-                    place_cod: item.place_cod || "",
-                    Паллет: item.Паллет || "",
-                    Баркод: item.Баркод || "",
-                    Статус: item.Статус || "Новый",
-                    Дата: item.Дата || formatDate(new Date()),
-                    Причина: item.Причина || ""
-                };
-                return newItem;
-            });
+            setLoading(true);
             
-            // Присваиваем обработанные данные
-            data = processedData;
-            loadModal.style.display = 'none';
-            fileInput.value = '';
-            updateStatus(`Загружено ${data.length} записей`);
-            saveDataToLocalStorage();
-            searchData();
+            const reader = new FileReader();
             
-        } catch (e) {
-            alert(`Ошибка при загрузке файла: ${e.message}`);
-            console.error(e);
-        } finally {
-            setLoading(false);
+            reader.onload = function(e) {
+                try {
+                    const data = e.target.result;
+                    let workbook;
+                    
+                    if (file.name.endsWith('.csv')) {
+                        workbook = XLSX.read(data, { type: 'string' });
+                    } else {
+                        workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+                    }
+                    
+                    // Преобразование в JSON с обработкой возможных ошибок
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    let jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    
+                    // Создаем глубокую копию данных, чтобы избежать проблем с readonly
+                    jsonData = JSON.parse(JSON.stringify(jsonData));
+                    
+                    // Проверка обязательных полей
+                    const requiredFields = ["place_cod", "Паллет", "Баркод"];
+                    const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
+                    const missingFields = requiredFields.filter(field => !(field in sampleItem));
+                    
+                    if (missingFields.length > 0) {
+                        alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
+                        setLoading(false);
+                        return;
+                    }
+                    
+                    // Обработка данных
+                    const processedData = jsonData.map(item => {
+                        // Создаем новый объект для каждого элемента
+                        const newItem = {
+                            place_cod: item.place_cod || "",
+                            Паллет: item.Паллет || "",
+                            Баркод: item.Баркод || "",
+                            Статус: item.Статус || "Новый",
+                            Дата: item.Дата || formatDate(new Date()),
+                            Причина: item.Причина || ""
+                        };
+                        return newItem;
+                    });
+                    
+                    // Присваиваем обработанные данные
+                    data = processedData;
+                    loadModal.style.display = 'none';
+                    fileInput.value = '';
+                    updateStatus(`Загружено ${data.length} записей`);
+                    saveDataToLocalStorage();
+                    searchData();
+                    
+                } catch (e) {
+                    alert(`Ошибка при загрузке файла: ${e.message}`);
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            reader.onerror = function() {
+                alert("Ошибка при чтении файла");
+                setLoading(false);
+            };
+            
+            if (file.name.endsWith('.csv')) {
+                reader.readAsText(file);
+            } else {
+                reader.readAsArrayBuffer(file);
+            }
         }
-    };
-    
-    reader.onerror = function() {
-        alert("Ошибка при чтении файла");
-        setLoading(false);
-    };
-    
-    if (file.name.endsWith('.csv')) {
-        reader.readAsText(file);
-    } else {
-        reader.readAsArrayBuffer(file);
-    }
-}
+
         // Функция сохранения данных в файл
         function saveData() {
             if (data.length === 0) {
@@ -828,6 +869,55 @@ function loadData() {
                 updateStatus(`Загружено ${data.length} записей из локального хранилища`);
             }
         });
+    </script>
+
+    <!-- Service Worker для офлайн-работы -->
+    <script>
+        // Создаем файл service worker (sw.js)
+        const swCode = `
+            const CACHE_NAME = 'pallet-scanner-v1';
+            const urlsToCache = [
+                './',
+                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js'
+            ];
+
+            self.addEventListener('install', event => {
+                event.waitUntil(
+                    caches.open(CACHE_NAME)
+                        .then(cache => {
+                            return cache.addAll(urlsToCache);
+                        })
+                );
+            });
+
+            self.addEventListener('fetch', event => {
+                event.respondWith(
+                    caches.match(event.request)
+                        .then(response => {
+                            if (response) {
+                                return response;
+                            }
+                            return fetch(event.request);
+                        })
+                );
+            });
+        `;
+
+        // Создаем Blob и URL для service worker
+        const blob = new Blob([swCode], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(blob);
+
+        // Регистрируем service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register(swUrl)
+                .then(registration => {
+                    console.log('ServiceWorker registration successful');
+                })
+                .catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+        }
     </script>
 </body>
 </html>
