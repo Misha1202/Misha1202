@@ -4,154 +4,334 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сканер паллет (Web-версия)</title>
+    <!-- Библиотеки для работы с Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        :root {
+            --primary-color: #4285f4;
+            --success-color: #34a853;
+            --danger-color: #ea4335;
+            --info-color: #17a2b8;
+            --light-gray: #f8f9fa;
+            --dark-gray: #343a40;
+        }
+        
+        * {
+            box-sizing: border-box;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
             background-color: #f5f5f5;
+            padding: 0;
+            margin: 0;
         }
+        
         .container {
-            max-width: 1000px;
+            max-width: 100%;
             margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 15px;
         }
+        
+        @media (min-width: 768px) {
+            .container {
+                max-width: 95%;
+                padding: 20px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .container {
+                max-width: 900px;
+            }
+        }
+        
         h1 {
             text-align: center;
-            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: var(--dark-gray);
         }
+        
+        @media (min-width: 768px) {
+            h1 {
+                font-size: 28px;
+            }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
         .input-group {
             display: flex;
-            margin-bottom: 20px;
-            align-items: center;
+            flex-direction: column;
+            margin-bottom: 15px;
         }
+        
+        @media (min-width: 576px) {
+            .input-group {
+                flex-direction: row;
+                align-items: center;
+            }
+        }
+        
         .input-group label {
-            margin-right: 10px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 500;
             font-size: 16px;
         }
+        
+        @media (min-width: 576px) {
+            .input-group label {
+                margin-bottom: 0;
+                margin-right: 10px;
+                min-width: 120px;
+            }
+        }
+        
         .input-group input {
-            flex-grow: 1;
-            padding: 10px;
+            flex: 1;
+            padding: 10px 15px;
             font-size: 16px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            height: 45px;
         }
+        
         .button-group {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 20px;
         }
+        
         button {
             padding: 10px 15px;
             font-size: 14px;
-            font-weight: bold;
+            font-weight: 500;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: all 0.3s ease;
+            flex: 1 0 auto;
+            min-width: 120px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+        
+        @media (min-width: 576px) {
+            button {
+                flex: 0 1 auto;
+            }
+        }
+        
         button.primary {
-            background-color: #007bff;
+            background-color: var(--primary-color);
             color: white;
         }
+        
         button.success {
-            background-color: #28a745;
+            background-color: var(--success-color);
             color: white;
         }
+        
         button.danger {
-            background-color: #dc3545;
+            background-color: var(--danger-color);
             color: white;
         }
+        
         button.info {
-            background-color: #17a2b8;
+            background-color: var(--info-color);
             color: white;
         }
+        
+        button.secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
         button:hover {
             opacity: 0.9;
+            transform: translateY(-1px);
         }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            font-size: 14px;
         }
+        
+        @media (min-width: 768px) {
+            table {
+                font-size: 16px;
+            }
+        }
+        
         th, td {
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
+        
         th {
-            background-color: #f8f9fa;
-            font-weight: bold;
+            background-color: var(--light-gray);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
         }
+        
         tr:hover {
-            background-color: #f5f5f5;
+            background-color: rgba(0, 0, 0, 0.02);
         }
+        
         .status-bar {
-            padding: 10px;
-            background-color: #e9ecef;
+            padding: 12px 15px;
+            background-color: var(--light-gray);
             border-radius: 4px;
             margin-top: 20px;
-            font-size: 16px;
-            font-weight: bold;
+            font-size: 14px;
+            font-weight: 500;
         }
+        
         .status-bar.alert {
             background-color: #fff3cd;
             color: #856404;
             animation: blink 1s linear 3;
         }
+        
         @keyframes blink {
             50% { background-color: #ffeeba; }
         }
+        
         .modal {
             display: none;
             position: fixed;
-            z-index: 1;
+            z-index: 1000;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.4);
+            background-color: rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
+        
         .modal-content {
             background-color: #fefefe;
-            margin: 15% auto;
+            margin: 20px auto;
             padding: 20px;
-            border: 1px solid #888;
-            width: 80%;
-            max-width: 500px;
             border-radius: 8px;
+            width: 95%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
         .close {
             color: #aaa;
-            float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0 10px;
         }
+        
+        .close:hover {
+            color: #333;
+        }
+        
         .form-group {
             margin-bottom: 15px;
         }
+        
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 500;
         }
+        
         .form-group input {
             width: 100%;
-            padding: 8px;
+            padding: 10px 15px;
             font-size: 16px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            height: 45px;
         }
+        
         .modal-footer {
             display: flex;
             justify-content: flex-end;
             gap: 10px;
             margin-top: 20px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading {
+            position: relative;
+        }
+        
+        .loading::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.5);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 </head>
@@ -159,45 +339,63 @@
     <div class="container">
         <h1>Сканер паллет</h1>
         
-        <div class="input-group">
-            <label for="search-input">Введите данные:</label>
-            <input type="text" id="search-input" placeholder="Введите код места, паллета или штрих-код">
+        <div class="card">
+            <div class="input-group">
+                <label for="search-input">Введите данные:</label>
+                <input type="text" id="search-input" placeholder="Код места, паллета или штрих-код" autocomplete="off">
+            </div>
+            
+            <div class="button-group">
+                <button class="primary" id="search-btn">
+                    <span class="btn-text">Поиск</span>
+                </button>
+                <button class="success" id="mark-valid-btn">
+                    <span class="btn-text">Актуально</span>
+                </button>
+                <button class="danger" id="mark-invalid-btn">
+                    <span class="btn-text">Неактуально</span>
+                </button>
+                <button class="info" id="add-btn">
+                    <span class="btn-text">Добавить</span>
+                </button>
+                <button class="secondary" id="load-btn">
+                    <span class="btn-text">Загрузить</span>
+                </button>
+                <button class="secondary" id="save-btn">
+                    <span class="btn-text">Сохранить</span>
+                </button>
+            </div>
         </div>
         
-        <div class="button-group">
-            <button class="primary" id="search-btn">Поиск</button>
-            <button class="success" id="mark-valid-btn">Актуально</button>
-            <button class="danger" id="mark-invalid-btn">Неактуально</button>
-            <button class="info" id="add-btn">Добавить</button>
-            <button id="load-btn">Загрузить</button>
-            <button id="save-btn">Сохранить</button>
+        <div class="card">
+            <div class="table-responsive">
+                <table id="results-table">
+                    <thead>
+                        <tr>
+                            <th>Код места</th>
+                            <th>Паллет</th>
+                            <th>Штрих-код</th>
+                            <th>Статус</th>
+                            <th>Дата</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Результаты будут здесь -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="status-bar" id="status-bar">Готов к работе</div>
         </div>
-        
-        <div style="overflow-x: auto;">
-            <table id="results-table">
-                <thead>
-                    <tr>
-                        <th>Код места</th>
-                        <th>Паллет</th>
-                        <th>Штрих-код</th>
-                        <th>Статус</th>
-                        <th>Дата</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Результаты будут здесь -->
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="status-bar" id="status-bar">Готов к работе</div>
     </div>
 
     <!-- Модальное окно для отметки неактуальности -->
     <div id="invalid-modal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Причина неактуальности</h2>
+            <div class="modal-header">
+                <h2 class="modal-title">Причина неактуальности</h2>
+                <button class="close">&times;</button>
+            </div>
             <div class="form-group">
                 <label for="reason-input">Укажите текущее МХ:</label>
                 <input type="text" id="reason-input" placeholder="Введите причину">
@@ -212,8 +410,10 @@
     <!-- Модальное окно для добавления записи -->
     <div id="add-modal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Добавить запись</h2>
+            <div class="modal-header">
+                <h2 class="modal-title">Добавить запись</h2>
+                <button class="close">&times;</button>
+            </div>
             <div class="form-group">
                 <label for="place-cod-input">Код места (place_cod):</label>
                 <input type="text" id="place-cod-input" placeholder="Введите код места">
@@ -236,11 +436,13 @@
     <!-- Модальное окно для загрузки файла -->
     <div id="load-modal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Загрузить данные</h2>
+            <div class="modal-header">
+                <h2 class="modal-title">Загрузить данные</h2>
+                <button class="close">&times;</button>
+            </div>
             <div class="form-group">
-                <label for="file-input">Выберите файл (CSV или Excel):</label>
-                <input type="file" id="file-input" accept=".csv,.xlsx,.xls">
+                <label for="file-input">Выберите файл (Excel или CSV):</label>
+                <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
             </div>
             <div class="modal-footer">
                 <button id="cancel-load-btn">Отмена</button>
@@ -272,11 +474,18 @@
         
         // Кнопки закрытия модальных окон
         document.querySelectorAll('.close').forEach(closeBtn => {
-            closeBtn.onclick = function() {
+            closeBtn.addEventListener('click', function() {
                 invalidModal.style.display = 'none';
                 addModal.style.display = 'none';
                 loadModal.style.display = 'none';
-            }
+            });
+        });
+
+        // Закрытие модальных окон при клике вне контента
+        window.addEventListener('click', function(event) {
+            if (event.target === invalidModal) invalidModal.style.display = 'none';
+            if (event.target === addModal) addModal.style.display = 'none';
+            if (event.target === loadModal) loadModal.style.display = 'none';
         });
 
         // Обработчики событий
@@ -313,9 +522,9 @@
             
             if (data.length > 0) {
                 const results = data.filter(item => 
-                    extractDigits(item.place_cod).includes(query) || 
-                    extractDigits(item.Паллет).includes(query) || 
-                    extractDigits(item.Баркод).includes(query)
+                    (item.place_cod && extractDigits(item.place_cod).includes(query)) || 
+                    (item.Паллет && extractDigits(item.Паллет).includes(query)) || 
+                    (item.Баркод && extractDigits(item.Баркод).includes(query))
                 );
                 
                 if (results.length > 0) {
@@ -323,7 +532,7 @@
                     showResults(results);
                     updateStatus(`Найдено: ${results.length} записей`);
                     
-                    if (results.some(item => /Списано|Буфер/i.test(item.Статус))) {
+                    if (results.some(item => item.Статус && /Списано|Буфер/i.test(item.Статус))) {
                         visualAlert();
                     }
                     
@@ -342,18 +551,18 @@
             
             results.forEach(item => {
                 const row = resultsTable.insertRow();
-                row.insertCell(0).textContent = item.place_cod;
-                row.insertCell(1).textContent = item.Паллет;
-                row.insertCell(2).textContent = item.Баркод;
-                row.insertCell(3).textContent = item.Статус;
-                row.insertCell(4).textContent = item.Дата;
+                row.insertCell(0).textContent = item.place_cod || '';
+                row.insertCell(1).textContent = item.Паллет || '';
+                row.insertCell(2).textContent = item.Баркод || '';
+                row.insertCell(3).textContent = item.Статус || '';
+                row.insertCell(4).textContent = item.Дата || '';
                 
                 // Подсветка строки в зависимости от статуса
-                if (/Списано|Буфер/i.test(item.Статус)) {
+                if (item.Статус && /Списано|Буфер/i.test(item.Статус)) {
                     row.style.backgroundColor = '#fff3cd';
-                } else if (/Актуально/i.test(item.Статус)) {
+                } else if (item.Статус && /Актуально/i.test(item.Статус)) {
                     row.style.backgroundColor = '#d4edda';
-                } else if (/Неактуально/i.test(item.Статус)) {
+                } else if (item.Статус && /Неактуально/i.test(item.Статус)) {
                     row.style.backgroundColor = '#f8d7da';
                 }
             });
@@ -374,6 +583,7 @@
             });
             
             updateStatus("Статус: Актуально");
+            saveDataToLocalStorage();
             searchData();
         }
 
@@ -396,6 +606,7 @@
             invalidModal.style.display = 'none';
             document.getElementById('reason-input').value = '';
             updateStatus(`Статус: Неактуально (МХ: ${reason})`);
+            saveDataToLocalStorage();
             searchData();
         }
 
@@ -416,7 +627,7 @@
                 Паллет: pallet,
                 Баркод: barcode,
                 Статус: "Новый",
-                Дата: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+                Дата: formatDate(now),
                 Причина: ""
             };
             
@@ -427,9 +638,16 @@
             document.getElementById('barcode-input').value = '';
             updateStatus(`Добавлен паллет: ${pallet}`);
             saveDataToLocalStorage();
+            searchData();
         }
 
-        // Функция загрузки данных
+        // Форматирование даты
+        function formatDate(date) {
+            const pad = num => num.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        // Функция загрузки данных из файла
         function loadData() {
             const fileInput = document.getElementById('file-input');
             const file = fileInput.files[0];
@@ -439,60 +657,47 @@
                 return;
             }
             
+            setLoading(true);
+            
             const reader = new FileReader();
             
             reader.onload = function(e) {
                 try {
-                    const content = e.target.result;
-                    let newData = [];
+                    const data = e.target.result;
+                    let workbook;
                     
                     if (file.name.endsWith('.csv')) {
-                        // Простая обработка CSV (в реальном приложении нужно использовать библиотеку)
-                        const lines = content.split('\n');
-                        const headers = lines[0].split(',').map(h => h.trim());
-                        
-                        for (let i = 1; i < lines.length; i++) {
-                            if (!lines[i].trim()) continue;
-                            
-                            const values = lines[i].split(',');
-                            const record = {};
-                            
-                            headers.forEach((header, index) => {
-                                record[header] = values[index] ? values[index].trim() : '';
-                            });
-                            
-                            newData.push(record);
-                        }
+                        // Чтение CSV файла
+                        workbook = XLSX.read(data, { type: 'binary', raw: true });
                     } else {
-                        // Для Excel нужно использовать библиотеку (например, xlsx)
-                        alert("Для загрузки Excel файлов требуется дополнительная библиотека");
-                        loadModal.style.display = 'none';
-                        return;
+                        // Чтение Excel файла
+                        workbook = XLSX.read(data, { type: 'array' });
                     }
                     
-                    // Проверяем обязательные поля
+                    // Преобразование первой страницы в JSON
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    // Проверка обязательных полей
                     const requiredFields = ["place_cod", "Паллет", "Баркод"];
-                    const missingFields = requiredFields.filter(field => 
-                        !newData[0] || !(field in newData[0])
-                    );
+                    const sampleItem = jsonData.length > 0 ? jsonData[0] : {};
+                    const missingFields = requiredFields.filter(field => !(field in sampleItem));
                     
                     if (missingFields.length > 0) {
                         alert(`В файле отсутствуют обязательные поля: ${missingFields.join(', ')}`);
+                        setLoading(false);
                         return;
                     }
                     
-                    // Добавляем недостающие поля
-                    newData = newData.map(item => {
+                    // Добавление недостающих полей
+                    const processedData = jsonData.map(item => {
                         if (!('Статус' in item)) item.Статус = 'Новый';
-                        if (!('Дата' in item)) {
-                            const now = new Date();
-                            item.Дата = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                        }
+                        if (!('Дата' in item)) item.Дата = formatDate(new Date());
                         if (!('Причина' in item)) item.Причина = '';
                         return item;
                     });
                     
-                    data = newData;
+                    data = processedData;
                     loadModal.style.display = 'none';
                     fileInput.value = '';
                     updateStatus(`Загружено ${data.length} записей`);
@@ -501,17 +706,24 @@
                     
                 } catch (e) {
                     alert(`Ошибка при загрузке файла: ${e.message}`);
+                } finally {
+                    setLoading(false);
                 }
+            };
+            
+            reader.onerror = function() {
+                alert("Ошибка при чтении файла");
+                setLoading(false);
             };
             
             if (file.name.endsWith('.csv')) {
                 reader.readAsText(file);
             } else {
-                reader.readAsBinaryString(file);
+                reader.readAsArrayBuffer(file);
             }
         }
 
-        // Функция сохранения данных
+        // Функция сохранения данных в файл
         function saveData() {
             if (data.length === 0) {
                 alert("Нет данных для сохранения");
@@ -519,25 +731,21 @@
             }
             
             try {
-                // Создаем CSV содержимое
-                const headers = ["place_cod", "Паллет", "Баркод", "Статус", "Дата", "Причина"];
-                const csvContent = [
-                    headers.join(','),
-                    ...data.map(item => headers.map(header => item[header]).join(','))
-                ].join('\n');
+                // Создаем новую книгу Excel
+                const workbook = XLSX.utils.book_new();
                 
-                // Создаем blob и ссылку для скачивания
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
+                // Преобразуем данные в рабочий лист
+                const worksheet = XLSX.utils.json_to_sheet(data);
                 
+                // Добавляем рабочий лист в книгу
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Паллеты");
+                
+                // Генерируем файл
                 const now = new Date();
-                const fileName = `сканирование_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.csv`;
-                link.setAttribute('download', fileName);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                const fileName = `сканирование_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
+                
+                // Сохраняем файл
+                XLSX.writeFile(workbook, fileName);
                 
                 updateStatus(`Данные сохранены в ${fileName}`);
                 
@@ -583,11 +791,35 @@
             }, 3000);
         }
 
+        // Установка состояния загрузки
+        function setLoading(isLoading) {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => {
+                const btnText = btn.querySelector('.btn-text');
+                if (btnText) {
+                    if (isLoading) {
+                        btnText.innerHTML = '<div class="spinner"></div>' + btnText.textContent;
+                        btn.disabled = true;
+                    } else {
+                        btnText.textContent = btnText.textContent;
+                        btn.disabled = false;
+                    }
+                }
+            });
+        }
+
         // Инициализация при загрузке страницы
-        window.onload = function() {
+        document.addEventListener('DOMContentLoaded', function() {
             loadFromLocalStorage();
             searchInput.focus();
-        };
+            
+            // Проверяем, есть ли данные в localStorage
+            if (data.length === 0) {
+                updateStatus("Готов к работе. Для начала загрузите данные или добавьте новую запись.");
+            } else {
+                updateStatus(`Загружено ${data.length} записей из локального хранилища`);
+            }
+        });
     </script>
 </body>
 </html>
