@@ -547,44 +547,48 @@
         document.getElementById('cancel-load-btn').addEventListener('click', () => loadModal.style.display = 'none');
 
         // Функция извлечения цифр из строки
-        function extractDigits(text) {
-            return text ? text.toString().replace(/\D/g, '') : '';
-        }
+    function extractDigits(text) {
+    if (!text) return ''; // Проверка на null/undefined
+    return text.toString().replace(/\D+/g, ''); // Удаляем все не-цифры
+}
 
-        // Функция поиска данных
-        function searchData() {
-            const query = extractDigits(searchInput.value.trim());
+function searchData() {
+    const query = extractDigits(searchInput.value.trim());
+    
+    if (!query) {
+        updateStatus("Введите данные для поиска");
+        return;
+    }
+    
+    if (window.appData.length > 0) {
+        const results = window.appData.filter(item => {
+            // Безопасное сравнение с проверкой на null/undefined
+            const placeCod = item.place_cod ? extractDigits(item.place_cod.toString()) : '';
+            const pallet = item.Паллет ? extractDigits(item.Паллет.toString()) : '';
+            const barcode = item.Баркод ? extractDigits(item.Баркод.toString()) : '';
             
-            if (!query) {
-                updateStatus("Введите данные для поиска");
-                return;
+            return placeCod.includes(query) || 
+                   pallet.includes(query) || 
+                   barcode.includes(query);
+        });
+        
+        if (results.length > 0) {
+            currentRecord = results[0];
+            showResults(results);
+            updateStatus(`Найдено: ${results.length} записей`);
+            
+            if (results.some(item => item.Статус && /Списано|Буфер/i.test(item.Статус))) {
+                visualAlert();
             }
             
-            if (data.length > 0) {
-                const results = data.filter(item => 
-                    (item.place_cod && extractDigits(item.place_cod).includes(query)) || 
-                    (item.Паллет && extractDigits(item.Паллет).includes(query)) || 
-                    (item.Баркод && extractDigits(item.Баркод).includes(query))
-                );
-                
-                if (results.length > 0) {
-                    currentRecord = results[0];
-                    showResults(results);
-                    updateStatus(`Найдено: ${results.length} записей`);
-                    
-                    if (results.some(item => item.Статус && /Списано|Буфер/i.test(item.Статус))) {
-                        visualAlert();
-                    }
-                    
-                    searchInput.value = '';
-                    return;
-                }
-            }
-            
-            updateStatus("Совпадений не найдено");
             searchInput.value = '';
+            return;
         }
-
+    }
+    
+    updateStatus("Совпадений не найдено");
+    searchInput.value = '';
+}
         // Функция отображения результатов
         function showResults(results) {
             resultsTable.innerHTML = '';
