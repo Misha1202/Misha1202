@@ -688,7 +688,7 @@
         }
 
         // Функция загрузки данных из файла
-       function loadData() {
+      function loadData() {
     const fileInput = document.getElementById('file-input');
     const file = fileInput.files[0];
     
@@ -703,43 +703,33 @@
 
     reader.onload = function(e) {
         try {
-            const data = e.target.result;
+            // 1. Чтение файла
+            const result = e.target.result; // Не переопределяем параметр 'data'
             let workbook;
 
-            // 1. Чтение файла
             if (file.name.endsWith('.csv')) {
-                workbook = XLSX.read(data, { type: 'string', raw: true });
+                workbook = XLSX.read(result, { type: 'string', raw: true });
             } else {
-                workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+                workbook = XLSX.read(new Uint8Array(result), { type: 'array' });
             }
 
-            // 2. Преобразование в JSON с дефолтными значениями
+            // 2. Обработка данных
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-            // 3. Создаем глубокую копию данных (обход readonly)
-            const processedData = jsonData.map(item => {
-                return {
-                    place_cod: String(item.place_cod || ""),
-                    Паллет: String(item.Паллет || ""),
-                    Баркод: String(item.Баркод || ""),
-                    Статус: String(item.Статус || "Новый"),
-                    Дата: String(item.Дата || formatDate(new Date())),
-                    Причина: String(item.Причина || "")
-                };
-            });
+            // 3. Создаем новый массив вместо перезаписи const
+            const processedData = jsonData.map(item => ({
+                place_cod: String(item.place_cod || ""),
+                Паллет: String(item.Паллет || ""),
+                Баркод: String(item.Баркод || ""),
+                Статус: String(item.Статус || "Новый"),
+                Дата: String(item.Дата || formatDate(new Date())),
+                Причина: String(item.Причина || "")
+            }));
 
-            // 4. Проверка обязательных полей
-            const requiredFields = ["place_cod", "Паллет", "Баркод"];
-            if (processedData.length > 0) {
-                const missingFields = requiredFields.filter(field => !processedData[0].hasOwnProperty(field));
-                if (missingFields.length > 0) {
-                    throw new Error(`Отсутствуют поля: ${missingFields.join(', ')}`);
-                }
-            }
-
-            data = processedData;
-            updateStatus(`Загружено ${data.length} записей`);
+            // 4. Обновляем основное хранилище данных
+            window.appData = processedData; // Используем глобальный объект
+            updateStatus(`Загружено ${window.appData.length} записей`);
             saveDataToLocalStorage();
 
         } catch (e) {
@@ -747,7 +737,6 @@
             console.error(e);
         } finally {
             setLoading(false);
-            loadModal.style.display = 'none';
             fileInput.value = '';
         }
     };
@@ -762,7 +751,8 @@
     } else {
         reader.readAsArrayBuffer(file);
     }
-}       // Проверка iOS
+}      
+         // Проверка iOS
         function isIOS() {
             return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
