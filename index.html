@@ -762,7 +762,11 @@
     } else {
         reader.readAsArrayBuffer(file);
     }
-}
+}       // Проверка iOS
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        }
         // Функция сохранения данных в файл
         function saveData() {
             if (data.length === 0) {
