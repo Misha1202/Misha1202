@@ -762,57 +762,83 @@ function searchData() {
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         }
         // Функция сохранения данных в файл
-        function saveData() {
-            if (data.length === 0) {
-                alert("Нет данных для сохранения");
-                return;
-            }
-            
-            try {
-                // Создаем новую книгу Excel
-                const workbook = XLSX.utils.book_new();
-                
-                // Преобразуем данные в рабочий лист
-                const worksheet = XLSX.utils.json_to_sheet(data);
-                
-                // Добавляем рабочий лист в книгу
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Паллеты");
-                
-                // Генерируем файл
-                const now = new Date();
-                const fileName = `сканирование_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
-                
-                // Сохраняем файл
-                XLSX.writeFile(workbook, fileName);
-                
-                updateStatus(`Данные сохранены в ${fileName}`);
-                
-            } catch (e) {
-                alert(`Не удалось сохранить файл: ${e.message}`);
-            }
+// 1. Исправленная функция сохранения данных
+function saveData() {
+    try {
+        // Проверяем, что есть данные для сохранения
+        if (!window.appData || window.appData.length === 0) {
+            alert("Нет данных для сохранения");
+            return;
         }
 
-        // Функция сохранения данных в localStorage
-        function saveDataToLocalStorage() {
-            try {
-                localStorage.setItem('palletScannerData', JSON.stringify(data));
-            } catch (e) {
-                console.error("Ошибка при сохранении в localStorage:", e);
-            }
-        }
+        // Создаем рабочую книгу Excel
+        const workbook = XLSX.utils.book_new();
+        
+        // Преобразуем данные в лист
+        const worksheet = XLSX.utils.json_to_sheet(window.appData);
+        
+        // Добавляем лист в книгу
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Паллеты");
+        
+        // Генерируем имя файла с текущей датой
+        const now = new Date();
+        const fileName = `pallet_scan_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.xlsx`;
+        
+        // Сохраняем файл
+        XLSX.writeFile(workbook, fileName);
+        
+        updateStatus(`Файл ${fileName} успешно скачан`);
 
-        // Функция загрузки данных из localStorage
-        function loadFromLocalStorage() {
-            try {
-                const savedData = localStorage.getItem('palletScannerData');
-                if (savedData) {
-                    data = JSON.parse(savedData);
-                    updateStatus("Данные загружены из локального хранилища");
-                }
-            } catch (e) {
-                console.error("Ошибка при загрузке из localStorage:", e);
-            }
+    } catch (e) {
+        alert(`Ошибка при сохранении: ${e.message}`);
+        console.error("Ошибка сохранения:", e);
+    }
+}
+
+// 2. Исправленная функция пометки статуса
+function markValid() {
+    if (!currentRecord) {
+        alert("Сначала найдите запись");
+        return;
+    }
+    
+    // Обновляем данные в глобальном хранилище
+    window.appData = window.appData.map(item => {
+        if (item.place_cod === currentRecord.place_cod && 
+            item.Паллет === currentRecord.Паллет) {
+            return { ...item, Статус: "Актуально" };
         }
+        return item;
+    });
+    
+    // Сохраняем изменения сразу
+    saveDataToLocalStorage();
+    updateStatus("Статус обновлен на 'Актуально'");
+    searchData(); // Обновляем отображение
+}
+
+// 3. Функция сохранения в localStorage
+function saveDataToLocalStorage() {
+    try {
+        localStorage.setItem('palletData', JSON.stringify(window.appData));
+        console.log("Данные сохранены в localStorage");
+    } catch (e) {
+        console.error("Ошибка сохранения в localStorage:", e);
+    }
+}
+
+// 4. Загрузка данных при старте
+function loadFromLocalStorage() {
+    try {
+        const savedData = localStorage.getItem('palletData');
+        if (savedData) {
+            window.appData = JSON.parse(savedData);
+            updateStatus(`Загружено ${window.appData.length} записей из памяти`);
+        }
+    } catch (e) {
+        console.error("Ошибка загрузки из localStorage:", e);
+    }
+}
 
         // Функция обновления статуса
         function updateStatus(message) {
