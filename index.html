@@ -1,938 +1,153 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканер паллет (Офлайн-версия)</title>
-    <!-- Библиотеки для работы с Excel -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <!-- Service Worker для офлайн-работы -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(registration => console.log('SW registered'))
-                    .catch(err => console.log('SW registration failed: ', err));
-            });
-        }
-    </script>
-    <style>
-        :root {
-            --primary-color: #4285f4;
-            --success-color: #34a853;
-            --danger-color: #ea4335;
-            --info-color: #17a2b8;
-            --light-gray: #f8f9fa;
-            --dark-gray: #343a40;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 15px;
-        }
-        
-        @media (min-width: 768px) {
-            .container {
-                max-width: 95%;
-                padding: 20px;
-            }
-        }
-        
-        @media (min-width: 992px) {
-            .container {
-                max-width: 900px;
-            }
-        }
-        
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 24px;
-            color: var(--dark-gray);
-        }
-        
-        @media (min-width: 768px) {
-            h1 {
-                font-size: 28px;
-            }
-        }
-        
-        .card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 15px;
-        }
-        
-        @media (min-width: 576px) {
-            .input-group {
-                flex-direction: row;
-                align-items: center;
-            }
-        }
-        
-        .input-group label {
-            margin-bottom: 8px;
-            font-weight: 500;
-            font-size: 16px;
-        }
-        
-        @media (min-width: 576px) {
-            .input-group label {
-                margin-bottom: 0;
-                margin-right: 10px;
-                min-width: 120px;
-            }
-        }
-        
-        .input-group input {
-            flex: 1;
-            padding: 10px 15px;
-            font-size: 16px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            height: 45px;
-        }
-        
-        .button-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        button {
-            padding: 10px 15px;
-            font-size: 14px;
-            font-weight: 500;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            flex: 1 0 auto;
-            min-width: 120px;
-            height: 45px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        @media (min-width: 576px) {
-            button {
-                flex: 0 1 auto;
-            }
-        }
-        
-        button.primary {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        button.success {
-            background-color: var(--success-color);
-            color: white;
-        }
-        
-        button.danger {
-            background-color: var(--danger-color);
-            color: white;
-        }
-        
-        button.info {
-            background-color: var(--info-color);
-            color: white;
-        }
-        
-        button.secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-        
-        button:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        .table-responsive {
-            width: 100%;
-            overflow-x: auto;
-            margin-bottom: 20px;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
-        
-        @media (min-width: 768px) {
-            table {
-                font-size: 16px;
-            }
-        }
-        
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        
-        th {
-            background-color: var(--light-gray);
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-        }
-        
-        tr:hover {
-            background-color: rgba(0, 0, 0, 0.02);
-        }
-        
-        .status-bar {
-            padding: 12px 15px;
-            background-color: var(--light-gray);
-            border-radius: 4px;
-            margin-top: 20px;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        
-        .status-bar.alert {
-            background-color: #fff3cd;
-            color: #856404;
-            animation: blink 1s linear 3;
-        }
-        
-        @keyframes blink {
-            50% { background-color: #ffeeba; }
-        }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        .modal-content {
-            background-color: #fefefe;
-            margin: 20px auto;
-            padding: 20px;
-            border-radius: 8px;
-            width: 95%;
-            max-width: 500px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .modal-title {
-            font-size: 20px;
-            font-weight: 600;
-        }
-        
-        .close {
-            color: #aaa;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 0 10px;
-        }
-        
-        .close:hover {
-            color: #333;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-        
-        .form-group input {
-            width: 100%;
-            padding: 10px 15px;
-            font-size: 16px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            height: 45px;
-        }
-        
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 10px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .loading {
-            position: relative;
-        }
-        
-        .loading::after {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(255, 255, 255, 0.5);
-            z-index: 10;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .offline-message {
-            display: none;
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: #ff9800;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Excel редактор</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { padding: 20px; background: #f8f9fa; }
+    .table-responsive { max-height: 500px; overflow-y: auto; }
+    textarea { resize: vertical; width: 100%; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Сканер паллет</h1>
-        
-        <div class="card">
-            <div class="input-group">
-                <label for="search-input">Введите данные:</label>
-                <input type="text" id="search-input" placeholder="Код места, паллета или штрих-код" autocomplete="off">
-            </div>
-            
-            <div class="button-group">
-                <button class="primary" id="search-btn">
-                    <span class="btn-text">Поиск</span>
-                </button>
-                <button class="success" id="mark-valid-btn">
-                    <span class="btn-text">Актуально</span>
-                </button>
-                <button class="danger" id="mark-invalid-btn">
-                    <span class="btn-text">Неактуально</span>
-                </button>
-                <button class="info" id="add-btn">
-                    <span class="btn-text">Добавить</span>
-                </button>
-                <button class="secondary" id="load-btn">
-                    <span class="btn-text">Загрузить</span>
-                </button>
-                <button class="secondary" id="save-btn">
-                    <span class="btn-text">Сохранить</span>
-                </button>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="table-responsive">
-                <table id="results-table">
-                    <thead>
-                        <tr>
-                            <th>Код места</th>
-                            <th>Паллет</th>
-                            <th>Штрих-код</th>
-                            <th>Статус</th>
-                            <th>Дата</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Результаты будут здесь -->
-                    </tbody>
-                </table>
-            </div>
-            
-            <div class="status-bar" id="status-bar">Готов к работе</div>
-        </div>
-    </div>
 
-    <!-- Модальное окно для отметки неактуальности -->
-    <div id="invalid-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Причина неактуальности</h2>
-                <button class="close">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="reason-input">Укажите текущее МХ:</label>
-                <input type="text" id="reason-input" placeholder="Введите причину">
-            </div>
-            <div class="modal-footer">
-                <button id="cancel-reason-btn">Отмена</button>
-                <button class="primary" id="save-reason-btn">Сохранить</button>
-            </div>
-        </div>
-    </div>
+<div class="container">
+  <h2 class="mb-4">Обработка Excel файла</h2>
 
-    <!-- Модальное окно для добавления записи -->
-    <div id="add-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Добавить запись</h2>
-                <button class="close">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="place-cod-input">Код места (place_cod):</label>
-                <input type="text" id="place-cod-input" placeholder="Введите код места">
-            </div>
-            <div class="form-group">
-                <label for="pallet-input">Номер паллета:</label>
-                <input type="text" id="pallet-input" placeholder="Введите номер паллета">
-            </div>
-            <div class="form-group">
-                <label for="barcode-input">Штрих-код:</label>
-                <input type="text" id="barcode-input" placeholder="Введите штрих-код">
-            </div>
-            <div class="modal-footer">
-                <button id="cancel-add-btn">Отмена</button>
-                <button class="primary" id="save-add-btn">Сохранить</button>
-            </div>
-        </div>
-    </div>
+  <div class="mb-3">
+    <input type="file" class="form-control" id="fileInput" accept=".xlsx">
+  </div>
 
-    <!-- Модальное окно для загрузки файла -->
-    <div id="load-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Загрузить данные</h2>
-                <button class="close">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="file-input">Выберите файл (Excel или CSV):</label>
-                <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
-            </div>
-            <div class="modal-footer">
-                <button id="cancel-load-btn">Отмена</button>
-                <button class="primary" id="confirm-load-btn">Загрузить</button>
-            </div>
-        </div>
-    </div>
+  <div class="input-group mb-3">
+    <input type="text" id="searchInput" class="form-control" placeholder="Поиск по содержимому">
+    <button class="btn btn-primary" onclick="search()">Поиск</button>
+    <button class="btn btn-success" onclick="saveSelected()">Сохранить выбранные</button>
+  </div>
 
-    <!-- Офлайн-уведомление -->
-    <div class="offline-message" id="offline-message">Работаем в офлайн-режиме</div>
+  <div class="input-group mb-4">
+    <input type="text" id="addRowInput" class="form-control" placeholder="Добавить новую строку (Enter)">
+    <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
+  </div>
 
-    <script>
-        // Инициализация данных
-        let data = [];
-        let currentRecord = null;
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped align-middle text-center" id="dataTable">
+      <thead class="table-light"><tr><th>Выбрать</th><th>Содержимое</th><th>Статус</th><th>Действия</th></tr></thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
+</div>
 
-        // Проверка соединения
-        function updateOnlineStatus() {
-            const offlineMessage = document.getElementById('offline-message');
-            if (navigator.onLine) {
-                offlineMessage.style.display = 'none';
-            } else {
-                offlineMessage.style.display = 'block';
-            }
-        }
+<script>
+let allRows = [];
+let displayedRows = [];
 
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        updateOnlineStatus();
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    const data = new Uint8Array(event.target.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    allRows = rows.map((row, index) => ({
+      raw: row.join(','),
+      values: row,
+      id: index,
+      selected: false,
+      status: ''
+    }));
+    search();
+  };
+  reader.readAsArrayBuffer(file);
+});
 
-        // Элементы DOM
-        const searchInput = document.getElementById('search-input');
-        const searchBtn = document.getElementById('search-btn');
-        const markValidBtn = document.getElementById('mark-valid-btn');
-        const markInvalidBtn = document.getElementById('mark-invalid-btn');
-        const addBtn = document.getElementById('add-btn');
-        const loadBtn = document.getElementById('load-btn');
-        const saveBtn = document.getElementById('save-btn');
-        const resultsTable = document.getElementById('results-table').getElementsByTagName('tbody')[0];
-        const statusBar = document.getElementById('status-bar');
-        
-        // Модальные окна
-        const invalidModal = document.getElementById('invalid-modal');
-        const addModal = document.getElementById('add-modal');
-        const loadModal = document.getElementById('load-modal');
-        
-        // Кнопки закрытия модальных окон
-        document.querySelectorAll('.close').forEach(closeBtn => {
-            closeBtn.addEventListener('click', function() {
-                invalidModal.style.display = 'none';
-                addModal.style.display = 'none';
-                loadModal.style.display = 'none';
-            });
-        });
+document.getElementById('addRowInput').addEventListener('keypress', function (e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addRow();
+  }
+});
 
-        // Закрытие модальных окон при клике вне контента
-        window.addEventListener('click', function(event) {
-            if (event.target === invalidModal) invalidModal.style.display = 'none';
-            if (event.target === addModal) addModal.style.display = 'none';
-            if (event.target === loadModal) loadModal.style.display = 'none';
-        });
-
-        // Обработчики событий
-        searchBtn.addEventListener('click', searchData);
-        searchInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') searchData();
-        });
-        markValidBtn.addEventListener('click', markValid);
-        markInvalidBtn.addEventListener('click', () => invalidModal.style.display = 'block');
-        addBtn.addEventListener('click', () => addModal.style.display = 'block');
-        loadBtn.addEventListener('click', () => loadModal.style.display = 'block');
-        saveBtn.addEventListener('click', saveData);
-        
-        document.getElementById('save-reason-btn').addEventListener('click', saveReason);
-        document.getElementById('cancel-reason-btn').addEventListener('click', () => invalidModal.style.display = 'none');
-        document.getElementById('save-add-btn').addEventListener('click', saveAddRecord);
-        document.getElementById('cancel-add-btn').addEventListener('click', () => addModal.style.display = 'none');
-        document.getElementById('confirm-load-btn').addEventListener('click', loadData);
-        document.getElementById('cancel-load-btn').addEventListener('click', () => loadModal.style.display = 'none');
-
-        // Функция извлечения цифр из строки
-    function extractDigits(text) {
-    if (!text) return ''; // Проверка на null/undefined
-    return text.toString().replace(/\D+/g, ''); // Удаляем все не-цифры
+function addRow() {
+  const input = document.getElementById('addRowInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const values = text.split(',');
+  const newRow = {
+    raw: text,
+    values: values,
+    id: allRows.length,
+    selected: false,
+    status: ''
+  };
+  allRows.push(newRow);
+  input.value = '';
+  search();
 }
 
-function searchData() {
-    const query = extractDigits(searchInput.value.trim());
-    
-    if (!query) {
-        updateStatus("Введите данные для поиска");
-        return;
-    }
-    
-    if (window.appData.length > 0) {
-        const results = window.appData.filter(item => {
-            // Безопасное сравнение с проверкой на null/undefined
-            const placeCod = item.place_cod ? extractDigits(item.place_cod.toString()) : '';
-            const pallet = item.Паллет ? extractDigits(item.Паллет.toString()) : '';
-            const barcode = item.Баркод ? extractDigits(item.Баркод.toString()) : '';
-            
-            return placeCod.includes(query) || 
-                   pallet.includes(query) || 
-                   barcode.includes(query);
-        });
-        
-        if (results.length > 0) {
-            currentRecord = results[0];
-            showResults(results);
-            updateStatus(`Найдено: ${results.length} записей`);
-            
-            if (results.some(item => item.Статус && /Списано|Буфер/i.test(item.Статус))) {
-                visualAlert();
-            }
-            
-            searchInput.value = '';
-            return;
-        }
-    }
-    
-    updateStatus("Совпадений не найдено");
-    searchInput.value = '';
-}
-        // Функция отображения результатов
-        function showResults(results) {
-            resultsTable.innerHTML = '';
-            
-            results.forEach(item => {
-                const row = resultsTable.insertRow();
-                row.insertCell(0).textContent = item.place_cod || '';
-                row.insertCell(1).textContent = item.Паллет || '';
-                row.insertCell(2).textContent = item.Баркод || '';
-                row.insertCell(3).textContent = item.Статус || '';
-                row.insertCell(4).textContent = item.Дата || '';
-                
-                // Подсветка строки в зависимости от статуса
-                if (item.Статус && /Списано|Буфер/i.test(item.Статус)) {
-                    row.style.backgroundColor = '#fff3cd';
-                } else if (item.Статус && /Актуально/i.test(item.Статус)) {
-                    row.style.backgroundColor = '#d4edda';
-                } else if (item.Статус && /Неактуально/i.test(item.Статус)) {
-                    row.style.backgroundColor = '#f8d7da';
-                }
-            });
-        }
-
-        // Функция отметки как актуально
-        function markValid() {
-            if (!currentRecord) {
-                alert("Сначала найдите запись");
-                return;
-            }
-            
-            data = data.map(item => {
-                if (item.place_cod === currentRecord.place_cod && item.Паллет === currentRecord.Паллет) {
-                    return { ...item, Статус: 'Актуально' };
-                }
-                return item;
-            });
-            
-            updateStatus("Статус: Актуально");
-            saveDataToLocalStorage();
-            searchData();
-        }
-
-        // Функция сохранения причины неактуальности
-        function saveReason() {
-            const reason = document.getElementById('reason-input').value.trim();
-            
-            if (!reason) {
-                alert("Необходимо указать МХ");
-                return;
-            }
-            
-            data = data.map(item => {
-                if (item.place_cod === currentRecord.place_cod && item.Паллет === currentRecord.Паллет) {
-                    return { ...item, Статус: 'Неактуально', Причина: reason };
-                }
-                return item;
-            });
-            
-            invalidModal.style.display = 'none';
-            document.getElementById('reason-input').value = '';
-            updateStatus(`Статус: Неактуально (МХ: ${reason})`);
-            saveDataToLocalStorage();
-            searchData();
-        }
-
-        // Функция добавления записи
-        function saveAddRecord() {
-            const placeCod = document.getElementById('place-cod-input').value.trim();
-            const pallet = document.getElementById('pallet-input').value.trim();
-            const barcode = document.getElementById('barcode-input').value.trim();
-            
-            if (!placeCod || !pallet || !barcode) {
-                alert("Все поля должны быть заполнены");
-                return;
-            }
-            
-            const now = new Date();
-            const newRecord = {
-                place_cod: placeCod,
-                Паллет: pallet,
-                Баркод: barcode,
-                Статус: "Новый",
-                Дата: formatDate(now),
-                Причина: ""
-            };
-            
-            data.push(newRecord);
-            addModal.style.display = 'none';
-            document.getElementById('place-cod-input').value = '';
-            document.getElementById('pallet-input').value = '';
-            document.getElementById('barcode-input').value = '';
-            updateStatus(`Добавлен паллет: ${pallet}`);
-            saveDataToLocalStorage();
-            searchData();
-        }
-
-        // Форматирование даты
-        function formatDate(date) {
-            const pad = num => num.toString().padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        }
-
-        // Функция загрузки данных из файла
-      function loadData() {
-    const fileInput = document.getElementById('file-input');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert("Выберите файл для загрузки");
-        return;
-    }
-
-    setLoading(true);
-
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        try {
-            // 1. Чтение файла
-            const result = e.target.result; // Не переопределяем параметр 'data'
-            let workbook;
-
-            if (file.name.endsWith('.csv')) {
-                workbook = XLSX.read(result, { type: 'string', raw: true });
-            } else {
-                workbook = XLSX.read(new Uint8Array(result), { type: 'array' });
-            }
-
-            // 2. Обработка данных
-            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-            // 3. Создаем новый массив вместо перезаписи const
-            const processedData = jsonData.map(item => ({
-                place_cod: String(item.place_cod || ""),
-                Паллет: String(item.Паллет || ""),
-                Баркод: String(item.Баркод || ""),
-                Статус: String(item.Статус || "Новый"),
-                Дата: String(item.Дата || formatDate(new Date())),
-                Причина: String(item.Причина || "")
-            }));
-
-            // 4. Обновляем основное хранилище данных
-            window.appData = processedData; // Используем глобальный объект
-            updateStatus(`Загружено ${window.appData.length} записей`);
-            saveDataToLocalStorage();
-
-        } catch (e) {
-            alert(`Ошибка при загрузке: ${e.message}`);
-            console.error(e);
-        } finally {
-            setLoading(false);
-            fileInput.value = '';
-        }
-    };
-
-    reader.onerror = () => {
-        alert("Ошибка чтения файла");
-        setLoading(false);
-    };
-
-    if (file.name.endsWith('.csv')) {
-        reader.readAsText(file);
-    } else {
-        reader.readAsArrayBuffer(file);
-    }
-}      
-         // Проверка iOS
-        function isIOS() {
-            return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        }
-        // Функция сохранения данных в файл
-// 1. Исправленная функция сохранения данных
-function saveData() {
-    try {
-        // Проверяем, что есть данные для сохранения
-        if (!window.appData || window.appData.length === 0) {
-            alert("Нет данных для сохранения");
-            return;
-        }
-
-        // Создаем рабочую книгу Excel
-        const workbook = XLSX.utils.book_new();
-        
-        // Преобразуем данные в лист
-        const worksheet = XLSX.utils.json_to_sheet(window.appData);
-        
-        // Добавляем лист в книгу
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Паллеты");
-        
-        // Генерируем имя файла с текущей датой
-        const now = new Date();
-        const fileName = `pallet_scan_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}.xlsx`;
-        
-        // Сохраняем файл
-        XLSX.writeFile(workbook, fileName);
-        
-        updateStatus(`Файл ${fileName} успешно скачан`);
-
-    } catch (e) {
-        alert(`Ошибка при сохранении: ${e.message}`);
-        console.error("Ошибка сохранения:", e);
-    }
+function search() {
+  const term = document.getElementById('searchInput').value.toLowerCase();
+  displayedRows = allRows.filter(r => r.raw.toLowerCase().includes(term)).slice(0, 100);
+  renderTable();
 }
 
-// 2. Исправленная функция пометки статуса
-function markValid() {
-    if (!currentRecord) {
-        alert("Сначала найдите запись");
-        return;
-    }
-    
-    // Обновляем данные в глобальном хранилище
-    window.appData = window.appData.map(item => {
-        if (item.place_cod === currentRecord.place_cod && 
-            item.Паллет === currentRecord.Паллет) {
-            return { ...item, Статус: "Актуально" };
-        }
-        return item;
-    });
-    
-    // Сохраняем изменения сразу
-    saveDataToLocalStorage();
-    updateStatus("Статус обновлен на 'Актуально'");
-    searchData(); // Обновляем отображение
+function renderTable() {
+  const table = document.getElementById('results');
+  table.innerHTML = '';
+  displayedRows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>
+      <td><textarea rows="2" onchange="editRow(${i}, this.value)">${row.raw}</textarea></td>
+      <td><span id="status-${i}" class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>
+      <td>
+        <button class="btn btn-sm btn-outline-success me-1" onclick="markStatus(${i}, 'Актуально')">Актуально</button>
+        <button class="btn btn-sm btn-outline-danger me-1" onclick="markStatus(${i}, 'Неактуально')">Неактуально</button>
+        <button class="btn btn-sm btn-outline-warning" onclick="markStatus(${i}, 'Изменить')">Изменить</button>
+      </td>
+    `;
+    table.appendChild(tr);
+  });
 }
 
-// 3. Функция сохранения в localStorage
-function saveDataToLocalStorage() {
-    try {
-        localStorage.setItem('palletData', JSON.stringify(window.appData));
-        console.log("Данные сохранены в localStorage");
-    } catch (e) {
-        console.error("Ошибка сохранения в localStorage:", e);
-    }
+function statusColor(status) {
+  return status === 'Актуально' ? 'success' :
+         status === 'Неактуально' ? 'danger' :
+         status === 'Изменить' ? 'warning' : 'secondary';
 }
 
-// 4. Загрузка данных при старте
-function loadFromLocalStorage() {
-    try {
-        const savedData = localStorage.getItem('palletData');
-        if (savedData) {
-            window.appData = JSON.parse(savedData);
-            updateStatus(`Загружено ${window.appData.length} записей из памяти`);
-        }
-    } catch (e) {
-        console.error("Ошибка загрузки из localStorage:", e);
-    }
+function toggleSelect(index) {
+  displayedRows[index].selected = !displayedRows[index].selected;
 }
 
-        // Функция обновления статуса
-        function updateStatus(message) {
-            statusBar.textContent = message;
-        }
+function markStatus(index, status) {
+  displayedRows[index].status = status;
+  document.getElementById(`status-${index}`).innerText = status;
+  document.getElementById(`status-${index}`).className = 'badge text-bg-' + statusColor(status);
+}
 
-        // Функция визуального оповещения
-        function visualAlert() {
-            statusBar.textContent = "ВНИМАНИЕ: Найдена запись со статусом 'Списано' или 'Буфер'!";
-            statusBar.classList.add('alert');
-            
-            setTimeout(() => {
-                statusBar.classList.remove('alert');
-            }, 3000);
-        }
+function editRow(index, newText) {
+  displayedRows[index].raw = newText;
+  displayedRows[index].values = newText.split(',');
+}
 
-        // Установка состояния загрузки
-        function setLoading(isLoading) {
-            const buttons = document.querySelectorAll('button');
-            buttons.forEach(btn => {
-                const btnText = btn.querySelector('.btn-text');
-                if (btnText) {
-                    if (isLoading) {
-                        btnText.innerHTML = '<div class="spinner"></div>' + btnText.textContent;
-                        btn.disabled = true;
-                    } else {
-                        btnText.textContent = btnText.textContent;
-                        btn.disabled = false;
-                    }
-                }
-            });
-        }
+function saveSelected() {
+  const selected = allRows.filter(row => row.selected);
+  if (selected.length === 0) {
+    alert("Нет выбранных строк.");
+    return;
+  }
+  const csv = selected.map(row => row.raw).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'selected_rows.csv';
+  link.click();
+}
+</script>
 
-        // Инициализация при загрузке страницы
-        document.addEventListener('DOMContentLoaded', function() {
-            loadFromLocalStorage();
-            searchInput.focus();
-            
-            // Проверяем, есть ли данные в localStorage
-            if (data.length === 0) {
-                updateStatus("Готов к работе. Для начала загрузите данные или добавьте новую запись.");
-            } else {
-                updateStatus(`Загружено ${data.length} записей из локального хранилища`);
-            }
-        });
-    </script>
-
-    <!-- Service Worker для офлайн-работы -->
-    <script>
-        // Создаем файл service worker (sw.js)
-        const swCode = `
-            const CACHE_NAME = 'pallet-scanner-v1';
-            const urlsToCache = [
-                './',
-                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-                'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js'
-            ];
-
-            self.addEventListener('install', event => {
-                event.waitUntil(
-                    caches.open(CACHE_NAME)
-                        .then(cache => {
-                            return cache.addAll(urlsToCache);
-                        })
-                );
-            });
-
-            self.addEventListener('fetch', event => {
-                event.respondWith(
-                    caches.match(event.request)
-                        .then(response => {
-                            if (response) {
-                                return response;
-                            }
-                            return fetch(event.request);
-                        })
-                );
-            });
-        `;
-
-        // Создаем Blob и URL для service worker
-        const blob = new Blob([swCode], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(blob);
-
-        // Регистрируем service worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register(swUrl)
-                .then(registration => {
-                    console.log('ServiceWorker registration successful');
-                })
-                .catch(err => {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-        }
-    </script>
 </body>
 </html>
