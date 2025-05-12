@@ -2,20 +2,26 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Excel редактор</title>
+  <title>Excel Поиск и Редактирование</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    body { padding: 20px; background: #f8f9fa; }
-    .table-responsive { max-height: 500px; overflow-y: auto; }
-    textarea { resize: vertical; width: 100%; }
+    body { padding: 20px; background-color: #f8f9fa; }
+    textarea { width: 100%; resize: vertical; }
+    .badge { font-size: 0.9em; }
+    th, td { white-space: nowrap; }
+    .table-responsive { max-height: 60vh; overflow-y: auto; }
+    @media (max-width: 576px) {
+      th, td { font-size: 0.85em; padding: 0.3rem; }
+      .btn-sm { font-size: 0.75em; padding: 0.25rem 0.5rem; }
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h2 class="mb-4">Обработка Excel файла</h2>
+  <h2 class="mb-4">Поиск и редактирование Excel</h2>
 
   <div class="mb-3">
     <input type="file" class="form-control" id="fileInput" accept=".xlsx">
@@ -28,13 +34,13 @@
   </div>
 
   <div class="input-group mb-4">
-    <input type="text" id="addRowInput" class="form-control" placeholder="Добавить новую строку (Enter)">
+    <input type="text" id="addRowInput" class="form-control" placeholder="Добавить строку через запятую (Enter)">
     <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
   </div>
 
   <div class="table-responsive">
     <table class="table table-bordered table-striped align-middle text-center" id="dataTable">
-      <thead class="table-light"><tr><th>Выбрать</th><th>Содержимое</th><th>Статус</th><th>Действия</th></tr></thead>
+      <thead class="table-light" id="tableHead"></thead>
       <tbody id="results"></tbody>
     </table>
   </div>
@@ -50,10 +56,9 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
   reader.onload = function (event) {
     const data = new Uint8Array(event.target.result);
     const workbook = XLSX.read(data, { type: 'array' });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     allRows = rows.map((row, index) => ({
-      raw: row.join(','),
       values: row,
       id: index,
       selected: false,
@@ -76,40 +81,48 @@ function addRow() {
   const text = input.value.trim();
   if (!text) return;
   const values = text.split(',');
-  const newRow = {
-    raw: text,
-    values: values,
-    id: allRows.length,
-    selected: false,
-    status: ''
-  };
-  allRows.push(newRow);
+  allRows.push({ values, id: allRows.length, selected: false, status: '' });
   input.value = '';
   search();
 }
 
 function search() {
   const term = document.getElementById('searchInput').value.toLowerCase();
-  displayedRows = allRows.filter(r => r.raw.toLowerCase().includes(term)).slice(0, 100);
+  displayedRows = allRows.filter(row =>
+    row.values.join(',').toLowerCase().includes(term)
+  ).slice(0, 100);
   renderTable();
 }
 
 function renderTable() {
-  const table = document.getElementById('results');
-  table.innerHTML = '';
+  const head = document.getElementById('tableHead');
+  const body = document.getElementById('results');
+  head.innerHTML = '';
+  body.innerHTML = '';
+
+  if (displayedRows.length === 0) return;
+
+  const maxCols = Math.max(...displayedRows.map(r => r.values.length));
+  const headerRow = document.createElement('tr');
+  headerRow.innerHTML = `<th>✔</th>` + Array.from({ length: maxCols }, (_, i) => `<th>Колонка ${i + 1}</th>`).join('') + `<th>Статус</th><th>Действия</th>`;
+  head.appendChild(headerRow);
+
   displayedRows.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>
-      <td><textarea rows="2" onchange="editRow(${i}, this.value)">${row.raw}</textarea></td>
-      <td><span id="status-${i}" class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>
+
+    const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
+    const cells = row.values.map((val, colIdx) => `<td><textarea rows="1" onchange="editCell(${i}, ${colIdx}, this.value)">${val || ''}</textarea></td>`);
+    while (cells.length < maxCols) cells.push('<td><textarea rows="1" onchange="editCell(${i}, ' + cells.length + ', this.value)"></textarea></td>');
+    const status = `<td><span id="status-${i}" class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`;
+    const actions = `
       <td>
         <button class="btn btn-sm btn-outline-success me-1" onclick="markStatus(${i}, 'Актуально')">Актуально</button>
         <button class="btn btn-sm btn-outline-danger me-1" onclick="markStatus(${i}, 'Неактуально')">Неактуально</button>
         <button class="btn btn-sm btn-outline-warning" onclick="markStatus(${i}, 'Изменить')">Изменить</button>
-      </td>
-    `;
-    table.appendChild(tr);
+      </td>`;
+
+    tr.innerHTML = checkbox + cells.join('') + status + actions;
+    body.appendChild(tr);
   });
 }
 
@@ -129,9 +142,9 @@ function markStatus(index, status) {
   document.getElementById(`status-${index}`).className = 'badge text-bg-' + statusColor(status);
 }
 
-function editRow(index, newText) {
-  displayedRows[index].raw = newText;
-  displayedRows[index].values = newText.split(',');
+function editCell(rowIndex, colIndex, value) {
+  if (!displayedRows[rowIndex].values[colIndex]) displayedRows[rowIndex].values[colIndex] = '';
+  displayedRows[rowIndex].values[colIndex] = value;
 }
 
 function saveSelected() {
@@ -140,7 +153,7 @@ function saveSelected() {
     alert("Нет выбранных строк.");
     return;
   }
-  const csv = selected.map(row => row.raw).join('\n');
+  const csv = selected.map(row => row.values.join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
