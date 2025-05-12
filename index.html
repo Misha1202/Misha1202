@@ -61,6 +61,13 @@
     @media (max-width: 576px) {
       th, td { font-size: 0.9em; }
     }
+    textarea {
+      width: 100%;
+      border: none;
+      background: transparent;
+      resize: none;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -81,6 +88,7 @@
         <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
         <button class="btn btn-primary" onclick="search()">Поиск</button>
         <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
+        <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
       </div>
 
       <!-- Добавление строки -->
@@ -113,27 +121,106 @@
 <script>
   let allRows = [];
   let displayedRows = [];
+  let hasUnsavedChanges = false;
 
   const COLUMNS = ['place_name', 'Паллет', 'Баркод', 'Количество ШК', 'Статус', 'place_cod'];
+  const STORAGE_KEY = 'excelCheckerData';
 
-  // Загрузка XLSX библиотеки
+  // Инициализация при загрузке страницы
+  document.addEventListener('DOMContentLoaded', () => {
+    loadFromLocalStorage();
+    setupBeforeUnloadWarning();
+  });
+
+  // Загрузка данных из localStorage
+  function loadFromLocalStorage() {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        if (Array.isArray(parsedData)) {
+          allRows = parsedData;
+          console.log('Данные успешно загружены из localStorage');
+        }
+      } catch (e) {
+        console.error('Ошибка при загрузке данных из localStorage:', e);
+      }
+    }
+  }
+
+  // Сохранение данных в localStorage
+  function saveToLocalStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
+      hasUnsavedChanges = false;
+      console.log('Данные сохранены в localStorage');
+    } catch (e) {
+      console.error('Ошибка при сохранении в localStorage:', e);
+    }
+  }
+
+  // Очистка всех данных
+  function clearAllData() {
+    if (confirm('Вы уверены, что хотите удалить все данные? Это действие нельзя отменить.')) {
+      allRows = [];
+      displayedRows = [];
+      localStorage.removeItem(STORAGE_KEY);
+      renderTable();
+      alert('Все данные удалены');
+    }
+  }
+
+  // Предупреждение при закрытии/обновлении страницы
+  function setupBeforeUnloadWarning() {
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу?';
+        return e.returnValue;
+      }
+    });
+  }
+
+  // Загрузка XLSX файла
   document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
+    if (!file) return;
+    
     const reader = new FileReader();
     reader.onload = function (event) {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      const header = rows[0];
-      const indices = COLUMNS.map(col => header.indexOf(col));
-      allRows = rows.slice(1).map((row, index) => ({
-        values: indices.map(i => row[i] || ''),
-        id: index,
-        selected: false,
-        status: row[header.indexOf('Статус')] || ''
-      }));
-      search();
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const header = rows[0];
+        const indices = COLUMNS.map(col => header.indexOf(col));
+        
+        const newRows = rows.slice(1).map((row, index) => ({
+          values: indices.map(i => row[i] || ''),
+          id: allRows.length + index,
+          selected: false,
+          status: row[header.indexOf('Статус')] || ''
+        }));
+        
+        // Добавляем только новые строки, которых еще нет
+        const existingBarcodes = new Set(allRows.map(r => r.values[2]));
+        const uniqueNewRows = newRows.filter(row => !existingBarcodes.has(row.values[2]));
+        
+        if (uniqueNewRows.length > 0) {
+          allRows = [...allRows, ...uniqueNewRows];
+          hasUnsavedChanges = true;
+          saveToLocalStorage();
+          alert(`Добавлено ${uniqueNewRows.length} новых строк из файла`);
+        } else {
+          alert('Все строки из файла уже есть в таблице');
+        }
+        
+        search();
+      } catch (error) {
+        console.error('Ошибка при обработке файла:', error);
+        alert('Произошла ошибка при обработке файла. Проверьте формат файла.');
+      }
     };
     reader.readAsArrayBuffer(file);
   });
@@ -143,10 +230,29 @@
     const input = document.getElementById('addRowInput');
     const text = input.value.trim();
     if (!text) return;
+    
     const values = text.split(',').map(s => s.trim());
     while (values.length < 5) values.push('');
-    allRows.push({ values, id: allRows.length, selected: false, status: values[4] || '' });
+    
+    // Проверяем, есть ли уже строка с таким баркодом
+    const barcode = values[2];
+    const exists = allRows.some(row => row.values[2] === barcode);
+    
+    if (exists) {
+      alert('Строка с таким баркодом уже существует');
+      return;
+    }
+    
+    allRows.push({
+      values,
+      id: allRows.length,
+      selected: false,
+      status: values[4] || ''
+    });
+    
     input.value = '';
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
     search();
   }
 
@@ -154,30 +260,37 @@
   document.getElementById('searchInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
       search();
-      this.value = ''; // очищаем поле поиска
     }
   });
 
   // Поиск
-function search() {
-  const termRaw = document.getElementById('searchInput').value.trim();
-  const digitsOnly = termRaw.replace(/\D/g, '');
+  function search() {
+    const termRaw = document.getElementById('searchInput').value.trim();
+    const digitsOnly = termRaw.replace(/\D/g, '');
 
-  displayedRows = allRows.filter(row => {
-    if (!digitsOnly) return false;
-    return row.values.some(val => {
-      const num = (val || '').toString().replace(/\D/g, '');
-      return num.includes(digitsOnly);
-    });
-  }).slice(0, 100);
+    displayedRows = allRows.filter(row => {
+      if (!digitsOnly) return false;
+      return row.values.some(val => {
+        const num = (val || '').toString().replace(/\D/g, '');
+        return num.includes(digitsOnly);
+      });
+    }).slice(0, 100);
 
-  renderTable();
-}
+    renderTable();
+  }
 
   // Отображение таблицы
   function renderTable() {
     const body = document.getElementById('results');
     body.innerHTML = '';
+    
+    if (displayedRows.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="7" class="text-center text-muted">Нет данных для отображения</td>`;
+      body.appendChild(tr);
+      return;
+    }
+    
     displayedRows.forEach((row, i) => {
       const tr = document.createElement('tr');
       const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
@@ -206,6 +319,14 @@ function search() {
   // Выбор строки
   function toggleSelect(index) {
     displayedRows[index].selected = !displayedRows[index].selected;
+    // Находим соответствующую строку в allRows и обновляем ее
+    const displayedRow = displayedRows[index];
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
+    if (allRowIndex !== -1) {
+      allRows[allRowIndex].selected = displayedRow.selected;
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
   }
 
   // Изменение статуса
@@ -216,11 +337,31 @@ function search() {
     document.getElementById(`status-${index}`).className = 'badge text-bg-' + statusColor(status);
     // Ставим галочку по умолчанию при изменении статуса
     displayedRows[index].selected = true;
+    
+    // Обновляем основную таблицу
+    const displayedRow = displayedRows[index];
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
+    if (allRowIndex !== -1) {
+      allRows[allRowIndex].status = status;
+      allRows[allRowIndex].values[4] = status;
+      allRows[allRowIndex].selected = true;
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
   }
 
   // Редактирование ячейки
   function editCell(rowIndex, colIndex, value) {
     displayedRows[rowIndex].values[colIndex] = value;
+    
+    // Обновляем основную таблицу
+    const displayedRow = displayedRows[rowIndex];
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
+    if (allRowIndex !== -1) {
+      allRows[allRowIndex].values[colIndex] = value;
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
   }
 
   // Сохранение всех строк с галочками
@@ -230,14 +371,23 @@ function search() {
       alert("Нет выбранных строк.");
       return;
     }
+    
     const csv = [COLUMNS.slice(0, 5).join(',')].concat(
       selected.map(row => row.values.slice(0, 5).join(','))
     ).join('\n');
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'selected_rows.csv';
+    link.download = `selected_rows_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
+    
+    // Снимаем выделение после сохранения
+    allRows.forEach(row => row.selected = false);
+    displayedRows.forEach(row => row.selected = false);
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
+    renderTable();
   }
 </script>
 
