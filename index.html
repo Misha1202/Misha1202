@@ -88,6 +88,9 @@
       border-radius: 5px;
       width: 300px;
     }
+    .add-row-input {
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 <body>
@@ -132,17 +135,41 @@
         <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
       </div>
 
-      <!-- Добавление строки -->
-      <div class="input-group mb-4">
-        <input type="text" id="addRowInput" class="form-control" placeholder="Добавить строку через запятую">
-        <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
+      <!-- Форма добавления новой записи -->
+      <div class="mb-4 p-3 border rounded">
+        <h5>Добавить новую запись:</h5>
+        <div class="row g-2">
+          <div class="col-md-3">
+            <input type="text" id="addPlaceCod" class="form-control add-row-input" placeholder="place_cod">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="addPallet" class="form-control add-row-input" placeholder="Паллет">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="addBarcode" class="form-control add-row-input" placeholder="Баркод">
+          </div>
+          <div class="col-md-3">
+            <select id="addStatus" class="form-select add-row-input">
+              <option value="" selected disabled>Статус</option>
+              <option value="Совпадает">Совпадает</option>
+              <option value="Буфер">Буфер</option>
+              <option value="Списано">Списано</option>
+              <option value="Не на своём МХ">Не на своём МХ</option>
+              <option value="Хлам">Хлам</option>
+              <option value="ШК">ШК</option>
+            </select>
+          </div>
+          <div class="col-md-12">
+            <button class="btn btn-outline-primary w-100" onclick="addRow()">Добавить запись</button>
+          </div>
+        </div>
       </div>
 
       <!-- Выпадающий список статусов -->
       <div class="mb-3">
         <select id="statusSelect" class="form-select status-select" onchange="applyStatusToSelected()">
-          <option value="" selected disabled>Выберите статус</option>
-          <option value="На МХ">На МХ</option>
+          <option value="" selected disabled>Выберите актуальный статус</option>
+          <option value="Совпадает">Совпадает</option>
           <option value="Буфер">Буфер</option>
           <option value="Списано">Списано</option>
           <option value="Не на своём МХ">Не на своём МХ</option>
@@ -157,11 +184,14 @@
           <thead class="table-light">
             <tr>
               <th width="40">✔</th>
-              <th>place_name</th>
+              <th>place_cod</th>
               <th>Паллет</th>
               <th>Баркод</th>
-              <th>Количество ШК</th>
-              <th width="150">Статус</th>
+              <th>Статус</th>
+              <th>Актуальный статус</th>
+              <th>ФИО</th>
+              <th>Блок</th>
+              <th>Дата</th>
             </tr>
           </thead>
           <tbody id="results"></tbody>
@@ -177,7 +207,7 @@
   let hasUnsavedChanges = false;
   let currentUser = null;
 
-  const COLUMNS = ['place_name', 'Паллет', 'Баркод', 'Количество ШК', 'Статус', 'place_cod'];
+  const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
   const STORAGE_KEY = 'excelCheckerData';
   const USER_STORAGE_KEY = 'excelCheckerUser';
 
@@ -191,7 +221,7 @@
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         search();
-        this.value = ''; // Очищаем поле после поиска
+        this.value = '';
       }
     });
   });
@@ -307,10 +337,16 @@
         const indices = COLUMNS.map(col => header.indexOf(col));
         
         const newRows = rows.slice(1).map((row, index) => ({
-          values: indices.map(i => row[i] || ''),
+          place_cod: row[indices[0]] || '',
+          pallet: row[indices[1]] || '',
+          barcode: row[indices[2]] || '',
+          status: row[indices[3]] || '',
+          actual_status: '',
+          fio: currentUser.fio,
+          block: currentUser.block,
+          date: new Date().toLocaleString(),
           id: allRows.length + index,
-          selected: false,
-          status: row[header.indexOf('Статус')] || ''
+          selected: false
         }));
         
         allRows = [...allRows, ...newRows];
@@ -327,25 +363,39 @@
 
   // Добавление строки
   function addRow() {
-    const input = document.getElementById('addRowInput');
-    const text = input.value.trim();
-    if (!text) return;
+    const placeCod = document.getElementById('addPlaceCod').value.trim();
+    const pallet = document.getElementById('addPallet').value.trim();
+    const barcode = document.getElementById('addBarcode').value.trim();
+    const status = document.getElementById('addStatus').value;
     
-    const values = text.split(',').map(s => s.trim());
-    while (values.length < 5) values.push('');
+    if (!placeCod || !pallet || !barcode || !status) {
+      alert('Пожалуйста, заполните все поля');
+      return;
+    }
     
     allRows.push({
-      values,
+      place_cod: placeCod,
+      pallet: pallet,
+      barcode: barcode,
+      status: status,
+      actual_status: '',
+      fio: currentUser.fio,
+      block: currentUser.block,
+      date: new Date().toLocaleString(),
       id: allRows.length,
-      selected: false,
-      status: values[4] || ''
+      selected: false
     });
     
-    input.value = '';
+    // Очищаем поля ввода
+    document.getElementById('addPlaceCod').value = '';
+    document.getElementById('addPallet').value = '';
+    document.getElementById('addBarcode').value = '';
+    document.getElementById('addStatus').value = '';
+    
     hasUnsavedChanges = true;
     saveToLocalStorage();
     search();
-    input.focus();
+    document.getElementById('addPlaceCod').focus();
   }
 
   // Поиск
@@ -355,9 +405,12 @@
     
     displayedRows = allRows.filter(row => {
       if (!digitsOnly) return false;
-      return row.values.some(val => {
-        const num = (val || '').toString().replace(/\D/g, '');
-        return num.includes(digitsOnly);
+      return Object.values(row).some(val => {
+        if (typeof val === 'string' || typeof val === 'number') {
+          const num = val.toString().replace(/\D/g, '');
+          return num.includes(digitsOnly);
+        }
+        return false;
       });
     }).slice(0, 100);
     
@@ -371,7 +424,7 @@
     
     if (displayedRows.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="6" class="text-center text-muted">Нет данных для отображения</td>`;
+      tr.innerHTML = `<td colspan="9" class="text-center text-muted">Нет данных для отображения</td>`;
       body.appendChild(tr);
       return;
     }
@@ -379,11 +432,19 @@
     displayedRows.forEach((row, i) => {
       const tr = document.createElement('tr');
       const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
-      const cells = row.values.slice(0, 5).map((val, colIdx) =>
-        `<td><textarea rows="1" onchange="editCell(${i}, ${colIdx}, this.value)">${val}</textarea></td>`
-      );
-      const status = `<td><span class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`;
-      tr.innerHTML = checkbox + cells.join('') + status;
+      
+      const cells = [
+        `<td>${row.place_cod}</td>`,
+        `<td>${row.pallet}</td>`,
+        `<td>${row.barcode}</td>`,
+        `<td><span class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`,
+        `<td><span class="badge text-bg-${statusColor(row.actual_status)}">${row.actual_status || '—'}</span></td>`,
+        `<td>${row.fio}</td>`,
+        `<td>${row.block}</td>`,
+        `<td>${row.date}</td>`
+      ];
+      
+      tr.innerHTML = checkbox + cells.join('');
       body.appendChild(tr);
     });
   }
@@ -391,7 +452,7 @@
   // Цвет статуса
   function statusColor(status) {
     switch(status) {
-      case 'На МХ': return 'success';
+      case 'Совпадает': return 'success';
       case 'Буфер': return 'primary';
       case 'Списано': return 'danger';
       case 'Не на своём МХ': return 'warning';
@@ -420,13 +481,14 @@
     
     displayedRows.forEach((row, index) => {
       if (row.selected) {
-        row.status = status;
-        row.values[4] = status;
+        row.actual_status = status;
         
         const allRowIndex = allRows.findIndex(r => r.id === row.id);
         if (allRowIndex !== -1) {
-          allRows[allRowIndex].status = status;
-          allRows[allRowIndex].values[4] = status;
+          allRows[allRowIndex].actual_status = status;
+          allRows[allRowIndex].fio = currentUser.fio;
+          allRows[allRowIndex].block = currentUser.block;
+          allRows[allRowIndex].date = new Date().toLocaleString();
         }
       }
     });
@@ -438,17 +500,6 @@
     document.getElementById('searchInput').focus();
   }
 
-  // Редактирование ячейки
-  function editCell(rowIndex, colIndex, value) {
-    displayedRows[rowIndex].values[colIndex] = value;
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRows[rowIndex].id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].values[colIndex] = value;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
-  }
-
   // Сохранение выбранных строк
   function saveSelected() {
     const selected = allRows.filter(row => row.selected);
@@ -457,8 +508,18 @@
       return;
     }
     
-    const csv = [COLUMNS.slice(0, 5).join(',')].concat(
-      selected.map(row => row.values.slice(0, 5).join(','))
+    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
+    const csv = [headers.join(',')].concat(
+      selected.map(row => [
+        row.place_cod,
+        row.pallet,
+        row.barcode,
+        row.status,
+        row.actual_status,
+        row.fio,
+        row.block,
+        row.date
+      ].join(','))
     ).join('\n');
     
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
