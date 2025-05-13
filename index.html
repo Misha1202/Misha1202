@@ -1,54 +1,490 @@
-import openpyxl
-import requests
-import json
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, height=device-height">
+  <title>Проверка Excel-файла</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+      background-color: #f8f9fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      height: 100vh;
+    }
+    .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+    .card {
+      flex: 1;
+      margin: 20px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      white-space: nowrap;
+      font-size: 1em;
+    }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    input, button, select {
+      font-size: 1em;
+    }
+    .table th {
+      background-color: #007bff;
+      color: white;
+    }
+    .table-striped tbody tr:nth-of-type(odd) {
+      background-color: #f1f1f1;
+    }
+    .table td, .table th {
+      padding: 12px;
+      text-align: center;
+    }
+    .table th {
+      border-top: 2px solid #007bff;
+      border-bottom: 2px solid #007bff;
+    }
+    .table td {
+      border-bottom: 1px solid #dee2e6;
+    }
+    .table-responsive {
+      overflow-y: auto;
+      height: 60vh;
+    }
+    @media (max-width: 576px) {
+      th, td { font-size: 0.9em; }
+    }
+    textarea {
+      width: 100%;
+      border: none;
+      background: transparent;
+      resize: none;
+      overflow: hidden;
+    }
+    .status-select {
+      min-width: 180px;
+    }
+    .auth-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .auth-content {
+      background-color: white;
+      margin: 15% auto;
+      padding: 20px;
+      border-radius: 5px;
+      width: 300px;
+    }
+  </style>
+</head>
+<body>
 
-# Настройки
-EXCEL_FILE = 'Книга1202.xlsx'  # Укажите путь к вашему файлу Excel
-SHEET_NAME = 'Лист1'          # Укажите название листа
-API_URL = "https://wms.wbwh.tech/srv/wms_front_wbstorenv_place_info_api_proxy_adapter/api/storage_places/by_name_and_office"
-API_TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJlbXBsb3llZV9pZCI6IjI5NzM2MSIsImV4cCI6MTc0NzA1ODA0NSwiaWF0IjoxNzQ3MDUwODMwLCJwaG9uZSI6IiIsInNlc3Npb25faWQiOiI1MTY2Mzk2My1jMWQ2LTRlYzQtNjA3OS0wZGUyM2M2YTllY2YifQ.nfPBbz6dd-qJ8-_6kZc1-DSecFMvlVDx2gxOsPO6ruI8Ey6jtOqL03YScSEoTYDk34qMN4AMlsAnZJ7ojVMplGpFh8sA2FTWZ2WrxpSt_QQAjJTviNFlwp-Nwq2NA1XKIojbJpdmmjCg6JzUZOgMOC-qmtLaJwENkLJM84NwokQ"       # Замените на ваш реальный токен
-OFFICE_ID = 507               # ID офиса из вашего примера
+<!-- Модальное окно авторизации -->
+<div id="authModal" class="auth-modal">
+  <div class="auth-content">
+    <h3 class="text-center mb-4">Авторизация</h3>
+    <div class="mb-3">
+      <label for="userFio" class="form-label">ФИО:</label>
+      <input type="text" class="form-control" id="userFio" placeholder="Введите ваше ФИО">
+    </div>
+    <div class="mb-3">
+      <label for="userBlock" class="form-label">Блок:</label>
+      <input type="text" class="form-control" id="userBlock" placeholder="Введите номер блока">
+    </div>
+    <button class="btn btn-primary w-100" onclick="login()">Войти</button>
+  </div>
+</div>
 
-def получить_place_id(название_места):
-    """Функция для получения place_id из API по названию места"""
-    заголовки = {
-        "Authorization": f"Bearer {API_TOKEN}",
-        "Content-Type": "application/json"
+<div class="container" id="mainContent" style="display:none;">
+  <div class="card">
+    <div class="card-body">
+      <h3 class="mb-4 text-center">Проверка Excel-файла</h3>
+      <div class="d-flex justify-content-between mb-3">
+        <div>
+          <span id="userInfo" class="fw-bold"></span>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="logout()">Выйти</button>
+      </div>
+
+      <!-- Форма загрузки файла -->
+      <div class="mb-3">
+        <input type="file" class="form-control" id="fileInput" accept=".xlsx">
+      </div>
+
+      <!-- Поиск -->
+      <div class="input-group mb-3">
+        <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
+        <button class="btn btn-primary" onclick="search()">Поиск</button>
+        <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
+        <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
+      </div>
+
+      <!-- Добавление строки -->
+      <div class="input-group mb-4">
+        <input type="text" id="addRowInput" class="form-control" placeholder="Добавить строку через запятую">
+        <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
+      </div>
+
+      <!-- Выпадающий список статусов -->
+      <div class="mb-3">
+        <select id="statusSelect" class="form-select status-select" onchange="applyStatusToSelected()">
+          <option value="" selected disabled>Выберите статус</option>
+          <option value="На МХ">На МХ</option>
+          <option value="Буфер">Буфер</option>
+          <option value="Списано">Списано</option>
+          <option value="Не на своём МХ">Не на своём МХ</option>
+          <option value="Хлам">Хлам</option>
+          <option value="ШК">ШК</option>
+        </select>
+      </div>
+
+      <!-- Таблица -->
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle" id="dataTable">
+          <thead class="table-light">
+            <tr>
+              <th width="40">✔</th>
+              <th>place_name</th>
+              <th>Паллет</th>
+              <th>Баркод</th>
+              <th>Количество ШК</th>
+              <th width="150">Статус</th>
+            </tr>
+          </thead>
+          <tbody id="results"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allRows = [];
+  let displayedRows = [];
+  let hasUnsavedChanges = false;
+  let currentUser = null;
+
+  const COLUMNS = ['place_name', 'Паллет', 'Баркод', 'Количество ШК', 'Статус', 'place_cod'];
+  const STORAGE_KEY = 'excelCheckerData';
+  const USER_STORAGE_KEY = 'excelCheckerUser';
+
+  // Инициализация при загрузке страницы
+  document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
+    loadFromLocalStorage();
+    setupBeforeUnloadWarning();
+    
+    // Обработка нажатия Enter в поле поиска
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        search();
+        this.value = ''; // Очищаем поле после поиска
+      }
+    });
+  });
+
+  // Проверка авторизации
+  function checkAuth() {
+    const savedUser = localStorage.getItem(USER_STORAGE_KEY);
+    if (savedUser) {
+      try {
+        currentUser = JSON.parse(savedUser);
+        showMainContent();
+      } catch (e) {
+        showAuthModal();
+      }
+    } else {
+      showAuthModal();
+    }
+  }
+
+  // Показать модальное окно авторизации
+  function showAuthModal() {
+    document.getElementById('authModal').style.display = 'block';
+    document.getElementById('userFio').focus();
+  }
+
+  // Скрыть модальное окно авторизации
+  function hideAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+  }
+
+  // Показать основной контент
+  function showMainContent() {
+    document.getElementById('mainContent').style.display = 'flex';
+    document.getElementById('userInfo').textContent = `${currentUser.fio} (Блок ${currentUser.block})`;
+    document.getElementById('searchInput').focus();
+  }
+
+  // Вход в систему
+  function login() {
+    const fio = document.getElementById('userFio').value.trim();
+    const block = document.getElementById('userBlock').value.trim();
+    
+    if (!fio || !block) {
+      alert('Пожалуйста, заполните все поля');
+      return;
     }
     
-    данные = {
-        "place_name": название_места,
-        "office_id": OFFICE_ID
+    currentUser = { fio, block };
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser));
+    hideAuthModal();
+    showMainContent();
+  }
+
+  // Выход из системы
+  function logout() {
+    if (confirm('Вы уверены, что хотите выйти?')) {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      currentUser = null;
+      document.getElementById('mainContent').style.display = 'none';
+      showAuthModal();
     }
+  }
+
+  // Загрузка данных из localStorage
+  function loadFromLocalStorage() {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        if (Array.isArray(parsedData)) {
+          allRows = parsedData;
+        }
+      } catch (e) {
+        console.error('Ошибка при загрузке данных:', e);
+      }
+    }
+  }
+
+  // Сохранение данных в localStorage
+  function saveToLocalStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
+      hasUnsavedChanges = false;
+    } catch (e) {
+      console.error('Ошибка при сохранении данных:', e);
+    }
+  }
+
+  // Предупреждение при закрытии страницы
+  function setupBeforeUnloadWarning() {
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу?';
+        return e.returnValue;
+      }
+    });
+  }
+
+  // Загрузка файла Excel
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
     
-    try:
-        ответ = requests.post(API_URL, headers=заголовки, data=json.dumps(данные))
-        ответ.raise_for_status()  # Проверка на ошибки
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const header = rows[0];
+        const indices = COLUMNS.map(col => header.indexOf(col));
         
-        результат = ответ.json()
-        if результат.get('data') and len(результат['data']) > 0:
-            return результат['data'][0]['place_id']
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Ошибка при запросе place_id для {название_места}: {e}")
-        return None
+        const newRows = rows.slice(1).map((row, index) => ({
+          values: indices.map(i => row[i] || ''),
+          id: allRows.length + index,
+          selected: false,
+          status: row[header.indexOf('Статус')] || ''
+        }));
+        
+        allRows = [...allRows, ...newRows];
+        hasUnsavedChanges = true;
+        saveToLocalStorage();
+        search();
+      } catch (error) {
+        console.error('Ошибка при обработке файла:', error);
+        alert('Ошибка при чтении файла. Проверьте формат.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
 
-def обработать_excel_файл():
-    """Основная функция обработки Excel файла"""
-    # Открываем файл Excel
-    книга = openpyxl.load_workbook(EXCEL_FILE)
-    лист = книга[SHEET_NAME]
+  // Добавление строки
+  function addRow() {
+    const input = document.getElementById('addRowInput');
+    const text = input.value.trim();
+    if (!text) return;
     
-    # Обрабатываем каждую строку в столбце B
-    for строка in лист.iter_rows(min_col=2, max_col=2):  # Столбец B
-        ячейка = строка[0]
-        if ячейка.value:  # Если есть название места
-            place_id = получить_place_id(str(ячейка.value).strip())
-            лист.cell(row=ячейка.row, column=1, value=place_id)  # Записываем в столбец A
+    const values = text.split(',').map(s => s.trim());
+    while (values.length < 5) values.push('');
     
-    # Сохраняем изменения
-    книга.save(EXCEL_FILE)
-    print("Обработка завершена!")
+    allRows.push({
+      values,
+      id: allRows.length,
+      selected: false,
+      status: values[4] || ''
+    });
+    
+    input.value = '';
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
+    search();
+    input.focus();
+  }
 
-if __name__ == "__main__":
-    обработать_excel_файл()
+  // Поиск
+  function search() {
+    const term = document.getElementById('searchInput').value.trim();
+    const digitsOnly = term.replace(/\D/g, '');
+    
+    displayedRows = allRows.filter(row => {
+      if (!digitsOnly) return false;
+      return row.values.some(val => {
+        const num = (val || '').toString().replace(/\D/g, '');
+        return num.includes(digitsOnly);
+      });
+    }).slice(0, 100);
+    
+    renderTable();
+  }
+
+  // Отображение таблицы
+  function renderTable() {
+    const body = document.getElementById('results');
+    body.innerHTML = '';
+    
+    if (displayedRows.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="6" class="text-center text-muted">Нет данных для отображения</td>`;
+      body.appendChild(tr);
+      return;
+    }
+    
+    displayedRows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
+      const cells = row.values.slice(0, 5).map((val, colIdx) =>
+        `<td><textarea rows="1" onchange="editCell(${i}, ${colIdx}, this.value)">${val}</textarea></td>`
+      );
+      const status = `<td><span class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`;
+      tr.innerHTML = checkbox + cells.join('') + status;
+      body.appendChild(tr);
+    });
+  }
+
+  // Цвет статуса
+  function statusColor(status) {
+    switch(status) {
+      case 'На МХ': return 'success';
+      case 'Буфер': return 'primary';
+      case 'Списано': return 'danger';
+      case 'Не на своём МХ': return 'warning';
+      case 'Хлам': return 'secondary';
+      case 'ШК': return 'info';
+      default: return 'light';
+    }
+  }
+
+  // Выбор строки
+  function toggleSelect(index) {
+    displayedRows[index].selected = !displayedRows[index].selected;
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRows[index].id);
+    if (allRowIndex !== -1) {
+      allRows[allRowIndex].selected = displayedRows[index].selected;
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
+  }
+
+  // Применение статуса к выбранным строкам
+  function applyStatusToSelected() {
+    const select = document.getElementById('statusSelect');
+    const status = select.value;
+    if (!status) return;
+    
+    displayedRows.forEach((row, index) => {
+      if (row.selected) {
+        row.status = status;
+        row.values[4] = status;
+        
+        const allRowIndex = allRows.findIndex(r => r.id === row.id);
+        if (allRowIndex !== -1) {
+          allRows[allRowIndex].status = status;
+          allRows[allRowIndex].values[4] = status;
+        }
+      }
+    });
+    
+    select.value = '';
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
+    renderTable();
+    document.getElementById('searchInput').focus();
+  }
+
+  // Редактирование ячейки
+  function editCell(rowIndex, colIndex, value) {
+    displayedRows[rowIndex].values[colIndex] = value;
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRows[rowIndex].id);
+    if (allRowIndex !== -1) {
+      allRows[allRowIndex].values[colIndex] = value;
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
+  }
+
+  // Сохранение выбранных строк
+  function saveSelected() {
+    const selected = allRows.filter(row => row.selected);
+    if (selected.length === 0) {
+      alert("Нет выбранных строк.");
+      return;
+    }
+    
+    const csv = [COLUMNS.slice(0, 5).join(',')].concat(
+      selected.map(row => row.values.slice(0, 5).join(','))
+    ).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `selected_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    
+    allRows.forEach(row => row.selected = false);
+    displayedRows.forEach(row => row.selected = false);
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
+    renderTable();
+    document.getElementById('searchInput').focus();
+  }
+
+  // Очистка всех данных
+  function clearAllData() {
+    if (confirm('Вы уверены, что хотите удалить все данные?')) {
+      allRows = [];
+      displayedRows = [];
+      localStorage.removeItem(STORAGE_KEY);
+      renderTable();
+      document.getElementById('searchInput').focus();
+    }
+  }
+</script>
+</body>
+</html>
