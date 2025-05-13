@@ -98,6 +98,13 @@
       z-index: 1000;
       display: none;
     }
+    .storage-warning {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -105,6 +112,11 @@
 <!-- Офлайн-уведомление -->
 <div class="alert alert-warning offline-alert" id="offlineAlert">
   Приложение работает в офлайн-режиме. Данные будут сохранены локально.
+</div>
+
+<!-- Уведомление о хранилище -->
+<div class="alert alert-danger storage-warning" id="storageWarning">
+  Внимание: осталось мало места в локальном хранилище. Рекомендуется экспортировать данные.
 </div>
 
 <!-- Модальное окно авторизации -->
@@ -221,8 +233,9 @@
   let isOnline = navigator.onLine;
 
   const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
-  const STORAGE_KEY = 'excelCheckerData_v2';
-  const USER_STORAGE_KEY = 'excelCheckerUser_v2';
+  const STORAGE_KEY = 'excelCheckerData_v3';
+  const USER_STORAGE_KEY = 'excelCheckerUser_v3';
+  const CHUNK_SIZE = 1024 * 1024 * 3; // 3MB chunks
 
   // Инициализация при загрузке страницы
   document.addEventListener('DOMContentLoaded', () => {
@@ -233,6 +246,7 @@
     checkAuth();
     loadFromLocalStorage();
     setupBeforeUnloadWarning();
+    checkStorageSpace();
     
     // Обработка нажатия Enter в поле поиска
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
@@ -241,13 +255,36 @@
         this.value = '';
       }
     });
+
+    // Периодическая проверка места в хранилище
+    setInterval(checkStorageSpace, 60000);
   });
 
   // Проверка статуса подключения
   function checkOnlineStatus() {
     isOnline = navigator.onLine;
-    const offlineAlert = document.getElementById('offlineAlert');
-    offlineAlert.style.display = isOnline ? 'none' : 'block';
+    document.getElementById('offlineAlert').style.display = isOnline ? 'none' : 'block';
+  }
+
+  // Проверка свободного места в хранилище
+  function checkStorageSpace() {
+    try {
+      if (!navigator.storage || !navigator.storage.estimate) {
+        console.log('StorageManager API не поддерживается');
+        return;
+      }
+
+      navigator.storage.estimate().then(estimate => {
+        const percentUsed = (estimate.usage / estimate.quota) * 100;
+        if (percentUsed > 80) {
+          document.getElementById('storageWarning').style.display = 'block';
+        } else {
+          document.getElementById('storageWarning').style.display = 'none';
+        }
+      });
+    } catch (e) {
+      console.error('Ошибка проверки места:', e);
+    }
   }
 
   // Проверка авторизации
@@ -309,31 +346,107 @@
     }
   }
 
-  // Загрузка данных из localStorage
-  function loadFromLocalStorage() {
+  // Сохранение данных в localStorage с обработкой ошибок
+  function saveToLocalStorage() {
     try {
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        const parsedData = JSON.parse(savedData);
-        if (Array.isArray(parsedData)) {
-          allRows = parsedData;
-          console.log('Данные успешно загружены из localStorage');
+      const data = {
+        rows: allRows,
+        meta: {
+          version: 1,
+          timestamp: new Date().toISOString(),
+          user: currentUser ? currentUser.fio : 'unknown'
         }
+      };
+
+      const dataString = JSON.stringify(data);
+      
+      // Попытка сохранения целиком
+      try {
+        localStorage.setItem(STORAGE_KEY, dataString);
+        localStorage.removeItem(`${STORAGE_KEY}_chunks`);
+        hasUnsavedChanges = false;
+        console.log('Данные успешно сохранены в localStorage');
+        return true;
+      } catch (e) {
+        console.log('Попытка сохранения целиком не удалась, пробуем разбить на части');
+        return saveDataInChunks(dataString);
       }
     } catch (e) {
-      console.error('Ошибка при загрузке данных:', e);
+      console.error('Ошибка при сохранении данных:', e);
+      alert('Критическая ошибка: не удалось сохранить данные. Попробуйте экспортировать данные и очистить хранилище.');
+      return false;
     }
   }
 
-  // Сохранение данных в localStorage
-  function saveToLocalStorage() {
+  // Сохранение данных по частям
+  function saveDataInChunks(dataString) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
+      const totalChunks = Math.ceil(dataString.length / CHUNK_SIZE);
+      const chunkInfo = {
+        totalChunks,
+        totalLength: dataString.length,
+        timestamp: new Date().toISOString()
+      };
+
+      // Сохраняем чанки
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = dataString.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        localStorage.setItem(`${STORAGE_KEY}_chunk_${i}`, chunk);
+      }
+
+      // Сохраняем информацию о чанках
+      localStorage.setItem(`${STORAGE_KEY}_chunks`, JSON.stringify(chunkInfo));
+      
+      // Удаляем старые данные
+      localStorage.removeItem(STORAGE_KEY);
+      
       hasUnsavedChanges = false;
-      console.log('Данные сохранены в localStorage');
+      console.log(`Данные сохранены в ${totalChunks} чанках`);
+      return true;
     } catch (e) {
-      console.error('Ошибка при сохранении данных:', e);
-      alert('Ошибка при сохранении данных. Возможно, закончилось место в хранилище.');
+      console.error('Ошибка при сохранении чанков:', e);
+      alert('Ошибка: недостаточно места в хранилище. Удалите старые данные или экспортируйте их.');
+      return false;
+    }
+  }
+
+  // Загрузка данных из localStorage
+  function loadFromLocalStorage() {
+    try {
+      // Проверяем, есть ли разбитые данные
+      const chunkInfoStr = localStorage.getItem(`${STORAGE_KEY}_chunks`);
+      if (chunkInfoStr) {
+        const chunkInfo = JSON.parse(chunkInfoStr);
+        let dataString = '';
+        
+        // Собираем данные из чанков
+        for (let i = 0; i < chunkInfo.totalChunks; i++) {
+          const chunk = localStorage.getItem(`${STORAGE_KEY}_chunk_${i}`);
+          if (chunk) {
+            dataString += chunk;
+          }
+        }
+        
+        // Проверяем целостность данных
+        if (dataString.length === chunkInfo.totalLength) {
+          const data = JSON.parse(dataString);
+          allRows = data.rows || [];
+          console.log('Данные успешно загружены из chunked localStorage');
+          return;
+        }
+      }
+      
+      // Обычная загрузка
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      if (savedData) {
+        const data = JSON.parse(savedData);
+        allRows = data.rows || [];
+        console.log('Данные успешно загружены из localStorage');
+      }
+    } catch (e) {
+      console.error('Ошибка при загрузке данных:', e);
+      alert('Ошибка загрузки данных. Возможно, хранилище повреждено.');
+      allRows = [];
     }
   }
 
@@ -372,7 +485,7 @@
           fio: currentUser.fio,
           block: currentUser.block,
           date: new Date().toLocaleString(),
-          id: Date.now() + index, // Уникальный ID на основе времени
+          id: Date.now() + index,
           selected: false
         }));
         
@@ -383,9 +496,10 @@
         if (uniqueNewRows.length > 0) {
           allRows = [...allRows, ...uniqueNewRows];
           hasUnsavedChanges = true;
-          saveToLocalStorage();
-          alert(`Добавлено ${uniqueNewRows.length} новых записей из файла`);
-          search();
+          if (saveToLocalStorage()) {
+            alert(`Добавлено ${uniqueNewRows.length} новых записей из файла`);
+            search();
+          }
         } else {
           alert('Все записи из файла уже есть в таблице');
         }
@@ -425,7 +539,7 @@
       fio: currentUser.fio,
       block: currentUser.block,
       date: new Date().toLocaleString(),
-      id: Date.now(), // Уникальный ID на основе времени
+      id: Date.now(),
       selected: false
     };
     
@@ -438,9 +552,10 @@
     document.getElementById('addStatus').value = '';
     
     hasUnsavedChanges = true;
-    saveToLocalStorage();
-    search();
-    document.getElementById('addPlaceCod').focus();
+    if (saveToLocalStorage()) {
+      search();
+      document.getElementById('addPlaceCod').focus();
+    }
   }
 
   // Поиск
@@ -543,14 +658,15 @@
     
     select.value = '';
     hasUnsavedChanges = true;
-    saveToLocalStorage();
-    renderTable();
-    document.getElementById('searchInput').focus();
-    
-    if (updatedCount > 0) {
-      alert(`Обновлено ${updatedCount} записей`);
-    } else {
-      alert('Не выбрано ни одной записи для обновления');
+    if (saveToLocalStorage()) {
+      renderTable();
+      document.getElementById('searchInput').focus();
+      
+      if (updatedCount > 0) {
+        alert(`Обновлено ${updatedCount} записей`);
+      } else {
+        alert('Не выбрано ни одной записи для обновления');
+      }
     }
   }
 
@@ -593,11 +709,26 @@
   // Очистка всех данных
   function clearAllData() {
     if (confirm('Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить.')) {
-      allRows = [];
-      displayedRows = [];
-      localStorage.removeItem(STORAGE_KEY);
-      renderTable();
-      alert('Все данные были удалены');
+      try {
+        // Удаляем все возможные варианты хранения данных
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(`${STORAGE_KEY}_chunks`);
+        
+        // Удаляем chunked данные
+        let i = 0;
+        while (localStorage.getItem(`${STORAGE_KEY}_chunk_${i}`)) {
+          localStorage.removeItem(`${STORAGE_KEY}_chunk_${i}`);
+          i++;
+        }
+        
+        allRows = [];
+        displayedRows = [];
+        renderTable();
+        alert('Все данные были полностью удалены из хранилища');
+      } catch (e) {
+        console.error('Ошибка при очистке данных:', e);
+        alert('Не удалось полностью очистить хранилище. Попробуйте вручную очистить данные сайта в настройках браузера.');
+      }
     }
   }
 </script>
