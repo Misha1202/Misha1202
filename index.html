@@ -91,33 +91,9 @@
     .add-row-input {
       margin-bottom: 5px;
     }
-    .offline-alert {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1000;
-      display: none;
-    }
-    .storage-warning {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      z-index: 1000;
-      display: none;
-    }
   </style>
 </head>
 <body>
-
-<!-- Офлайн-уведомление -->
-<div class="alert alert-warning offline-alert" id="offlineAlert">
-  Приложение работает в офлайн-режиме. Данные будут сохранены локально.
-</div>
-
-<!-- Уведомление о хранилище -->
-<div class="alert alert-danger storage-warning" id="storageWarning">
-  Внимание: осталось мало места в локальном хранилище. Рекомендуется экспортировать данные.
-</div>
 
 <!-- Модальное окно авторизации -->
 <div id="authModal" class="auth-modal">
@@ -155,7 +131,7 @@
       <div class="input-group mb-3">
         <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
         <button class="btn btn-primary" onclick="search()">Поиск</button>
-        <button class="btn btn-success" onclick="saveSelected()">Сохранить в файл</button>
+        <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
         <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
       </div>
 
@@ -215,7 +191,7 @@
               <th>Актуальный статус</th>
               <th>ФИО</th>
               <th>Блок</th>
-              <th>Дата изменения</th>
+              <th>Дата</th>
             </tr>
           </thead>
           <tbody id="results"></tbody>
@@ -230,23 +206,16 @@
   let displayedRows = [];
   let hasUnsavedChanges = false;
   let currentUser = null;
-  let isOnline = navigator.onLine;
 
   const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
-  const STORAGE_KEY = 'excelCheckerData_v3';
-  const USER_STORAGE_KEY = 'excelCheckerUser_v3';
-  const CHUNK_SIZE = 1024 * 1024 * 3; // 3MB chunks
+  const STORAGE_KEY = 'excelCheckerData';
+  const USER_STORAGE_KEY = 'excelCheckerUser';
 
   // Инициализация при загрузке страницы
   document.addEventListener('DOMContentLoaded', () => {
-    checkOnlineStatus();
-    window.addEventListener('online', checkOnlineStatus);
-    window.addEventListener('offline', checkOnlineStatus);
-    
     checkAuth();
     loadFromLocalStorage();
     setupBeforeUnloadWarning();
-    checkStorageSpace();
     
     // Обработка нажатия Enter в поле поиска
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
@@ -255,37 +224,7 @@
         this.value = '';
       }
     });
-
-    // Периодическая проверка места в хранилище
-    setInterval(checkStorageSpace, 60000);
   });
-
-  // Проверка статуса подключения
-  function checkOnlineStatus() {
-    isOnline = navigator.onLine;
-    document.getElementById('offlineAlert').style.display = isOnline ? 'none' : 'block';
-  }
-
-  // Проверка свободного места в хранилище
-  function checkStorageSpace() {
-    try {
-      if (!navigator.storage || !navigator.storage.estimate) {
-        console.log('StorageManager API не поддерживается');
-        return;
-      }
-
-      navigator.storage.estimate().then(estimate => {
-        const percentUsed = (estimate.usage / estimate.quota) * 100;
-        if (percentUsed > 80) {
-          document.getElementById('storageWarning').style.display = 'block';
-        } else {
-          document.getElementById('storageWarning').style.display = 'none';
-        }
-      });
-    } catch (e) {
-      console.error('Ошибка проверки места:', e);
-    }
-  }
 
   // Проверка авторизации
   function checkAuth() {
@@ -338,7 +277,7 @@
 
   // Выход из системы
   function logout() {
-    if (confirm('Вы уверены, что хотите выйти? Все данные останутся сохраненными.')) {
+    if (confirm('Вы уверены, что хотите выйти?')) {
       localStorage.removeItem(USER_STORAGE_KEY);
       currentUser = null;
       document.getElementById('mainContent').style.display = 'none';
@@ -346,107 +285,28 @@
     }
   }
 
-  // Сохранение данных в localStorage с обработкой ошибок
-  function saveToLocalStorage() {
-    try {
-      const data = {
-        rows: allRows,
-        meta: {
-          version: 1,
-          timestamp: new Date().toISOString(),
-          user: currentUser ? currentUser.fio : 'unknown'
-        }
-      };
-
-      const dataString = JSON.stringify(data);
-      
-      // Попытка сохранения целиком
-      try {
-        localStorage.setItem(STORAGE_KEY, dataString);
-        localStorage.removeItem(`${STORAGE_KEY}_chunks`);
-        hasUnsavedChanges = false;
-        console.log('Данные успешно сохранены в localStorage');
-        return true;
-      } catch (e) {
-        console.log('Попытка сохранения целиком не удалась, пробуем разбить на части');
-        return saveDataInChunks(dataString);
-      }
-    } catch (e) {
-      console.error('Ошибка при сохранении данных:', e);
-      alert('Критическая ошибка: не удалось сохранить данные. Попробуйте экспортировать данные и очистить хранилище.');
-      return false;
-    }
-  }
-
-  // Сохранение данных по частям
-  function saveDataInChunks(dataString) {
-    try {
-      const totalChunks = Math.ceil(dataString.length / CHUNK_SIZE);
-      const chunkInfo = {
-        totalChunks,
-        totalLength: dataString.length,
-        timestamp: new Date().toISOString()
-      };
-
-      // Сохраняем чанки
-      for (let i = 0; i < totalChunks; i++) {
-        const chunk = dataString.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        localStorage.setItem(`${STORAGE_KEY}_chunk_${i}`, chunk);
-      }
-
-      // Сохраняем информацию о чанках
-      localStorage.setItem(`${STORAGE_KEY}_chunks`, JSON.stringify(chunkInfo));
-      
-      // Удаляем старые данные
-      localStorage.removeItem(STORAGE_KEY);
-      
-      hasUnsavedChanges = false;
-      console.log(`Данные сохранены в ${totalChunks} чанках`);
-      return true;
-    } catch (e) {
-      console.error('Ошибка при сохранении чанков:', e);
-      alert('Ошибка: недостаточно места в хранилище. Удалите старые данные или экспортируйте их.');
-      return false;
-    }
-  }
-
   // Загрузка данных из localStorage
   function loadFromLocalStorage() {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        if (Array.isArray(parsedData)) {
+          allRows = parsedData;
+        }
+      } catch (e) {
+        console.error('Ошибка при загрузке данных:', e);
+      }
+    }
+  }
+
+  // Сохранение данных в localStorage
+  function saveToLocalStorage() {
     try {
-      // Проверяем, есть ли разбитые данные
-      const chunkInfoStr = localStorage.getItem(`${STORAGE_KEY}_chunks`);
-      if (chunkInfoStr) {
-        const chunkInfo = JSON.parse(chunkInfoStr);
-        let dataString = '';
-        
-        // Собираем данные из чанков
-        for (let i = 0; i < chunkInfo.totalChunks; i++) {
-          const chunk = localStorage.getItem(`${STORAGE_KEY}_chunk_${i}`);
-          if (chunk) {
-            dataString += chunk;
-          }
-        }
-        
-        // Проверяем целостность данных
-        if (dataString.length === chunkInfo.totalLength) {
-          const data = JSON.parse(dataString);
-          allRows = data.rows || [];
-          console.log('Данные успешно загружены из chunked localStorage');
-          return;
-        }
-      }
-      
-      // Обычная загрузка
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        const data = JSON.parse(savedData);
-        allRows = data.rows || [];
-        console.log('Данные успешно загружены из localStorage');
-      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
+      hasUnsavedChanges = false;
     } catch (e) {
-      console.error('Ошибка при загрузке данных:', e);
-      alert('Ошибка загрузки данных. Возможно, хранилище повреждено.');
-      allRows = [];
+      console.error('Ошибка при сохранении данных:', e);
     }
   }
 
@@ -485,24 +345,14 @@
           fio: currentUser.fio,
           block: currentUser.block,
           date: new Date().toLocaleString(),
-          id: Date.now() + index,
+          id: allRows.length + index,
           selected: false
         }));
         
-        // Добавляем только новые уникальные записи
-        const existingBarcodes = new Set(allRows.map(r => r.barcode));
-        const uniqueNewRows = newRows.filter(row => !existingBarcodes.has(row.barcode));
-        
-        if (uniqueNewRows.length > 0) {
-          allRows = [...allRows, ...uniqueNewRows];
-          hasUnsavedChanges = true;
-          if (saveToLocalStorage()) {
-            alert(`Добавлено ${uniqueNewRows.length} новых записей из файла`);
-            search();
-          }
-        } else {
-          alert('Все записи из файла уже есть в таблице');
-        }
+        allRows = [...allRows, ...newRows];
+        hasUnsavedChanges = true;
+        saveToLocalStorage();
+        search();
       } catch (error) {
         console.error('Ошибка при обработке файла:', error);
         alert('Ошибка при чтении файла. Проверьте формат.');
@@ -523,14 +373,7 @@
       return;
     }
     
-    // Проверяем, есть ли уже запись с таким баркодом
-    const exists = allRows.some(row => row.barcode === barcode);
-    if (exists) {
-      alert('Запись с таким баркодом уже существует');
-      return;
-    }
-    
-    const newRow = {
+    allRows.push({
       place_cod: placeCod,
       pallet: pallet,
       barcode: barcode,
@@ -539,11 +382,9 @@
       fio: currentUser.fio,
       block: currentUser.block,
       date: new Date().toLocaleString(),
-      id: Date.now(),
+      id: allRows.length,
       selected: false
-    };
-    
-    allRows.push(newRow);
+    });
     
     // Очищаем поля ввода
     document.getElementById('addPlaceCod').value = '';
@@ -552,10 +393,9 @@
     document.getElementById('addStatus').value = '';
     
     hasUnsavedChanges = true;
-    if (saveToLocalStorage()) {
-      search();
-      document.getElementById('addPlaceCod').focus();
-    }
+    saveToLocalStorage();
+    search();
+    document.getElementById('addPlaceCod').focus();
   }
 
   // Поиск
@@ -639,8 +479,6 @@
     const status = select.value;
     if (!status) return;
     
-    let updatedCount = 0;
-    
     displayedRows.forEach((row, index) => {
       if (row.selected) {
         row.actual_status = status;
@@ -651,26 +489,18 @@
           allRows[allRowIndex].fio = currentUser.fio;
           allRows[allRowIndex].block = currentUser.block;
           allRows[allRowIndex].date = new Date().toLocaleString();
-          updatedCount++;
         }
       }
     });
     
     select.value = '';
     hasUnsavedChanges = true;
-    if (saveToLocalStorage()) {
-      renderTable();
-      document.getElementById('searchInput').focus();
-      
-      if (updatedCount > 0) {
-        alert(`Обновлено ${updatedCount} записей`);
-      } else {
-        alert('Не выбрано ни одной записи для обновления');
-      }
-    }
+    saveToLocalStorage();
+    renderTable();
+    document.getElementById('searchInput').focus();
   }
 
-  // Сохранение выбранных строк в файл
+  // Сохранение выбранных строк
   function saveSelected() {
     const selected = allRows.filter(row => row.selected);
     if (selected.length === 0) {
@@ -678,57 +508,42 @@
       return;
     }
     
-    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата изменения'];
+    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
     const csv = [headers.join(',')].concat(
       selected.map(row => [
-        `"${row.place_cod}"`,
-        `"${row.pallet}"`,
-        `"${row.barcode}"`,
-        `"${row.status}"`,
-        `"${row.actual_status}"`,
-        `"${row.fio}"`,
-        `"${row.block}"`,
-        `"${row.date}"`
+        row.place_cod,
+        row.pallet,
+        row.barcode,
+        row.status,
+        row.actual_status,
+        row.fio,
+        row.block,
+        row.date
       ].join(','))
     ).join('\n');
     
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `selected_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     
-    // Снимаем выделение после сохранения
     allRows.forEach(row => row.selected = false);
     displayedRows.forEach(row => row.selected = false);
     hasUnsavedChanges = true;
     saveToLocalStorage();
     renderTable();
+    document.getElementById('searchInput').focus();
   }
 
   // Очистка всех данных
   function clearAllData() {
-    if (confirm('Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить.')) {
-      try {
-        // Удаляем все возможные варианты хранения данных
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(`${STORAGE_KEY}_chunks`);
-        
-        // Удаляем chunked данные
-        let i = 0;
-        while (localStorage.getItem(`${STORAGE_KEY}_chunk_${i}`)) {
-          localStorage.removeItem(`${STORAGE_KEY}_chunk_${i}`);
-          i++;
-        }
-        
-        allRows = [];
-        displayedRows = [];
-        renderTable();
-        alert('Все данные были полностью удалены из хранилища');
-      } catch (e) {
-        console.error('Ошибка при очистке данных:', e);
-        alert('Не удалось полностью очистить хранилище. Попробуйте вручную очистить данные сайта в настройках браузера.');
-      }
+    if (confirm('Вы уверены, что хотите удалить все данные?')) {
+      allRows = [];
+      displayedRows = [];
+      localStorage.removeItem(STORAGE_KEY);
+      renderTable();
+      document.getElementById('searchInput').focus();
     }
   }
 </script>
