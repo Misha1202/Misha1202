@@ -44,7 +44,7 @@
       background-color: #f1f1f1;
     }
     .table td, .table th {
-      padding: 12px;
+      padding: 8px;
       text-align: center;
     }
     .table th {
@@ -61,12 +61,20 @@
     @media (max-width: 576px) {
       th, td { font-size: 0.9em; }
     }
-    textarea {
+    .editable {
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 3px;
+      transition: background-color 0.2s;
+    }
+    .editable:hover {
+      background-color: #e9ecef;
+    }
+    .editable-input {
       width: 100%;
-      border: none;
-      background: transparent;
-      resize: none;
-      overflow: hidden;
+      padding: 4px;
+      border: 1px solid #ced4da;
+      border-radius: 3px;
     }
     .status-select {
       min-width: 180px;
@@ -90,6 +98,9 @@
     }
     .add-row-input {
       margin-bottom: 5px;
+    }
+    .badge {
+      cursor: pointer;
     }
   </style>
 </head>
@@ -129,7 +140,7 @@
 
       <!-- Поиск -->
       <div class="input-group mb-3">
-        <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
+        <input type="text" id="searchInput" class="form-control" placeholder="Поиск по place_cod, place_name, Паллет, Баркод">
         <button class="btn btn-primary" onclick="search()">Поиск</button>
         <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
         <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
@@ -139,16 +150,19 @@
       <div class="mb-4 p-3 border rounded">
         <h5>Добавить новую запись:</h5>
         <div class="row g-2">
-          <div class="col-md-3">
+          <div class="col-md-2">
             <input type="text" id="addPlaceCod" class="form-control add-row-input" placeholder="place_cod">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
+            <input type="text" id="addPlaceName" class="form-control add-row-input" placeholder="place_name">
+          </div>
+          <div class="col-md-2">
             <input type="text" id="addPallet" class="form-control add-row-input" placeholder="Паллет">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <input type="text" id="addBarcode" class="form-control add-row-input" placeholder="Баркод">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <select id="addStatus" class="form-select add-row-input">
               <option value="" selected disabled>Статус</option>
               <option value="Совпадает">Совпадает</option>
@@ -157,9 +171,10 @@
               <option value="Не на своём МХ">Не на своём МХ</option>
               <option value="Хлам">Хлам</option>
               <option value="ШК">ШК</option>
+              <option value="Нет на МХ">Нет на МХ</option>
             </select>
           </div>
-          <div class="col-md-12">
+          <div class="col-md-2">
             <button class="btn btn-outline-primary w-100" onclick="addRow()">Добавить запись</button>
           </div>
         </div>
@@ -175,6 +190,7 @@
           <option value="Не на своём МХ">Не на своём МХ</option>
           <option value="Хлам">Хлам</option>
           <option value="ШК">ШК</option>
+          <option value="Нет на МХ">Нет на МХ</option>
         </select>
       </div>
 
@@ -185,6 +201,7 @@
             <tr>
               <th width="40">✔</th>
               <th>place_cod</th>
+              <th>place_name</th>
               <th>Паллет</th>
               <th>Баркод</th>
               <th>Статус</th>
@@ -207,7 +224,7 @@
   let hasUnsavedChanges = false;
   let currentUser = null;
 
-  const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
+  const COLUMNS = ['place_cod', 'place_name', 'Паллет', 'Баркод', 'Статус'];
   const STORAGE_KEY = 'excelCheckerData';
   const USER_STORAGE_KEY = 'excelCheckerUser';
 
@@ -221,7 +238,7 @@
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         search();
-        this.value = '';
+        this.value = ''; // Очищаем поле после нажатия Enter
       }
     });
   });
@@ -338,9 +355,10 @@
         
         const newRows = rows.slice(1).map((row, index) => ({
           place_cod: row[indices[0]] || '',
-          pallet: row[indices[1]] || '',
-          barcode: row[indices[2]] || '',
-          status: row[indices[3]] || '',
+          place_name: row[indices[1]] || '',
+          pallet: row[indices[2]] || '',
+          barcode: row[indices[3]] || '',
+          status: row[indices[4]] || '',
           actual_status: '',
           fio: currentUser.fio,
           block: currentUser.block,
@@ -364,17 +382,19 @@
   // Добавление строки
   function addRow() {
     const placeCod = document.getElementById('addPlaceCod').value.trim();
+    const placeName = document.getElementById('addPlaceName').value.trim();
     const pallet = document.getElementById('addPallet').value.trim();
     const barcode = document.getElementById('addBarcode').value.trim();
     const status = document.getElementById('addStatus').value;
     
-    if (!placeCod || !pallet || !barcode || !status) {
+    if (!placeCod || !placeName || !pallet || !barcode || !status) {
       alert('Пожалуйста, заполните все поля');
       return;
     }
     
     allRows.push({
       place_cod: placeCod,
+      place_name: placeName,
       pallet: pallet,
       barcode: barcode,
       status: status,
@@ -388,6 +408,7 @@
     
     // Очищаем поля ввода
     document.getElementById('addPlaceCod').value = '';
+    document.getElementById('addPlaceName').value = '';
     document.getElementById('addPallet').value = '';
     document.getElementById('addBarcode').value = '';
     document.getElementById('addStatus').value = '';
@@ -398,33 +419,41 @@
     document.getElementById('addPlaceCod').focus();
   }
 
-  // Поиск
+  // Поиск по цифрам в place_cod, place_name, Паллет, Баркод
   function search() {
-    const term = document.getElementById('searchInput').value.trim();
-    const digitsOnly = term.replace(/\D/g, '');
+    const input = document.getElementById('searchInput').value.trim();
+    // Извлекаем только цифры из ввода
+    const digitsOnly = input.replace(/\D/g, '');
+    
+    if (!digitsOnly) {
+      displayedRows = [];
+      renderTable();
+      document.getElementById('searchInput').value = '';
+      return;
+    }
     
     displayedRows = allRows.filter(row => {
-      if (!digitsOnly) return false;
-      return Object.values(row).some(val => {
-        if (typeof val === 'string' || typeof val === 'number') {
-          const num = val.toString().replace(/\D/g, '');
-          return num.includes(digitsOnly);
-        }
-        return false;
-      });
+      // Проверяем все нужные поля на наличие извлеченных цифр
+      return (
+        (row.place_cod && row.place_cod.toString().includes(digitsOnly)) ||
+        (row.place_name && row.place_name.toString().includes(digitsOnly)) ||
+        (row.pallet && row.pallet.toString().includes(digitsOnly)) ||
+        (row.barcode && row.barcode.toString().includes(digitsOnly))
+      );
     }).slice(0, 100);
     
     renderTable();
+    document.getElementById('searchInput').value = '';
   }
 
-  // Отображение таблицы
+  // Отображение таблицы с возможностью редактирования
   function renderTable() {
     const body = document.getElementById('results');
     body.innerHTML = '';
     
     if (displayedRows.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="9" class="text-center text-muted">Нет данных для отображения</td>`;
+      tr.innerHTML = `<td colspan="10" class="text-center text-muted">Нет данных для отображения</td>`;
       body.appendChild(tr);
       return;
     }
@@ -433,12 +462,25 @@
       const tr = document.createElement('tr');
       const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
       
+      // Функция для создания редактируемой ячейки
+      const createEditableCell = (value, field, rowId) => {
+        return `<div class="editable" onclick="startEdit(this, '${field}', ${rowId})">${value || '—'}</div>`;
+      };
+      
+      // Функция для создания редактируемого статуса
+      const createEditableStatus = (value, field, rowId, isActual = false) => {
+        if (!value) value = '—';
+        const colorClass = statusColor(value);
+        return `<span class="badge text-bg-${colorClass}" onclick="editStatus(this, '${field}', ${rowId}, ${isActual})">${value}</span>`;
+      };
+      
       const cells = [
-        `<td>${row.place_cod}</td>`,
-        `<td>${row.pallet}</td>`,
-        `<td>${row.barcode}</td>`,
-        `<td><span class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`,
-        `<td><span class="badge text-bg-${statusColor(row.actual_status)}">${row.actual_status || '—'}</span></td>`,
+        `<td>${createEditableCell(row.place_cod, 'place_cod', row.id)}</td>`,
+        `<td>${createEditableCell(row.place_name, 'place_name', row.id)}</td>`,
+        `<td>${createEditableCell(row.pallet, 'pallet', row.id)}</td>`,
+        `<td>${createEditableCell(row.barcode, 'barcode', row.id)}</td>`,
+        `<td>${createEditableStatus(row.status, 'status', row.id)}</td>`,
+        `<td>${createEditableStatus(row.actual_status, 'actual_status', row.id, true)}</td>`,
         `<td>${row.fio}</td>`,
         `<td>${row.block}</td>`,
         `<td>${row.date}</td>`
@@ -447,6 +489,99 @@
       tr.innerHTML = checkbox + cells.join('');
       body.appendChild(tr);
     });
+  }
+
+  // Начало редактирования ячейки
+  function startEdit(element, field, rowId) {
+    const currentValue = element.textContent === '—' ? '' : element.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'editable-input';
+    input.value = currentValue;
+    
+    element.innerHTML = '';
+    element.appendChild(input);
+    input.focus();
+    
+    const saveEdit = () => {
+      const newValue = input.value.trim();
+      updateRowData(rowId, field, newValue);
+      element.innerHTML = newValue || '—';
+    };
+    
+    input.addEventListener('blur', saveEdit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        saveEdit();
+      }
+    });
+  }
+
+  // Редактирование статуса
+  function editStatus(element, field, rowId, isActual = false) {
+    const statuses = [
+      'Совпадает', 'Буфер', 'Списано', 
+      'Не на своём МХ', 'Хлам', 'ШК','Нет на МХ'
+    ];
+    
+    const currentValue = element.textContent === '—' ? '' : element.textContent;
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm';
+    
+    // Добавляем пустой вариант
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '—';
+    select.appendChild(emptyOption);
+    
+    // Добавляем варианты статусов
+    statuses.forEach(status => {
+      const option = document.createElement('option');
+      option.value = status;
+      option.textContent = status;
+      if (status === currentValue) option.selected = true;
+      select.appendChild(option);
+    });
+    
+    element.innerHTML = '';
+    element.appendChild(select);
+    select.focus();
+    
+    const saveEdit = () => {
+      const newValue = select.value;
+      updateRowData(rowId, field, newValue);
+      
+      // Обновляем цвет после изменения
+      const colorClass = statusColor(newValue);
+      element.className = `badge text-bg-${colorClass}`;
+      element.textContent = newValue || '—';
+    };
+    
+    select.addEventListener('change', saveEdit);
+    select.addEventListener('blur', saveEdit);
+  }
+
+  // Обновление данных строки
+  function updateRowData(rowId, field, newValue) {
+    const rowIndex = allRows.findIndex(r => r.id === rowId);
+    if (rowIndex !== -1) {
+      allRows[rowIndex][field] = newValue;
+      allRows[rowIndex].fio = currentUser.fio;
+      allRows[rowIndex].block = currentUser.block;
+      allRows[rowIndex].date = new Date().toLocaleString();
+      
+      // Обновляем также в displayedRows
+      const displayedIndex = displayedRows.findIndex(r => r.id === rowId);
+      if (displayedIndex !== -1) {
+        displayedRows[displayedIndex][field] = newValue;
+        displayedRows[displayedIndex].fio = currentUser.fio;
+        displayedRows[displayedIndex].block = currentUser.block;
+        displayedRows[displayedIndex].date = new Date().toLocaleString();
+      }
+      
+      hasUnsavedChanges = true;
+      saveToLocalStorage();
+    }
   }
 
   // Цвет статуса
@@ -458,6 +593,7 @@
       case 'Не на своём МХ': return 'warning';
       case 'Хлам': return 'secondary';
       case 'ШК': return 'info';
+      case 'Нет на МХ': return 'info'; 
       default: return 'light';
     }
   }
@@ -508,10 +644,11 @@
       return;
     }
     
-    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
+    const headers = ['place_cod', 'place_name', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
     const csv = [headers.join(',')].concat(
       selected.map(row => [
         row.place_cod,
+        row.place_name,
         row.pallet,
         row.barcode,
         row.status,
