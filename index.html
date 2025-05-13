@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, height=device-height">
-  <title>Проверка Паллет</title>
+  <title>Проверка Excel-файла</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
@@ -33,7 +33,7 @@
     .input-group {
       margin-bottom: 20px;
     }
-    input, button {
+    input, button, select {
       font-size: 1em;
     }
     .table th {
@@ -68,15 +68,59 @@
       resize: none;
       overflow: hidden;
     }
+    .status-select {
+      min-width: 180px;
+    }
+    .auth-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .auth-content {
+      background-color: white;
+      margin: 15% auto;
+      padding: 20px;
+      border-radius: 5px;
+      width: 300px;
+    }
+    .add-row-input {
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 <body>
 
-<div class="container">
+<!-- Модальное окно авторизации -->
+<div id="authModal" class="auth-modal">
+  <div class="auth-content">
+    <h3 class="text-center mb-4">Авторизация</h3>
+    <div class="mb-3">
+      <label for="userFio" class="form-label">ФИО:</label>
+      <input type="text" class="form-control" id="userFio" placeholder="Введите ваше ФИО">
+    </div>
+    <div class="mb-3">
+      <label for="userBlock" class="form-label">Блок:</label>
+      <input type="text" class="form-control" id="userBlock" placeholder="Введите номер блока">
+    </div>
+    <button class="btn btn-primary w-100" onclick="login()">Войти</button>
+  </div>
+</div>
+
+<div class="container" id="mainContent" style="display:none;">
   <div class="card">
     <div class="card-body">
       <h3 class="mb-4 text-center">Проверка Excel-файла</h3>
-      <p class="text-center">Загрузите файл и ищите по значениям из таблицы</p>
+      <div class="d-flex justify-content-between mb-3">
+        <div>
+          <span id="userInfo" class="fw-bold"></span>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="logout()">Выйти</button>
+      </div>
 
       <!-- Форма загрузки файла -->
       <div class="mb-3">
@@ -91,10 +135,47 @@
         <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
       </div>
 
-      <!-- Добавление строки -->
-      <div class="input-group mb-4">
-        <input type="text" id="addRowInput" class="form-control" placeholder="Добавить строку через запятую">
-        <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
+      <!-- Форма добавления новой записи -->
+      <div class="mb-4 p-3 border rounded">
+        <h5>Добавить новую запись:</h5>
+        <div class="row g-2">
+          <div class="col-md-3">
+            <input type="text" id="addPlaceCod" class="form-control add-row-input" placeholder="place_cod">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="addPallet" class="form-control add-row-input" placeholder="Паллет">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="addBarcode" class="form-control add-row-input" placeholder="Баркод">
+          </div>
+          <div class="col-md-3">
+            <select id="addStatus" class="form-select add-row-input">
+              <option value="" selected disabled>Статус</option>
+              <option value="Совпадает">Совпадает</option>
+              <option value="Буфер">Буфер</option>
+              <option value="Списано">Списано</option>
+              <option value="Не на своём МХ">Не на своём МХ</option>
+              <option value="Хлам">Хлам</option>
+              <option value="ШК">ШК</option>
+            </select>
+          </div>
+          <div class="col-md-12">
+            <button class="btn btn-outline-primary w-100" onclick="addRow()">Добавить запись</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Выпадающий список статусов -->
+      <div class="mb-3">
+        <select id="statusSelect" class="form-select status-select" onchange="applyStatusToSelected()">
+          <option value="" selected disabled>Выберите актуальный статус</option>
+          <option value="Совпадает">Совпадает</option>
+          <option value="Буфер">Буфер</option>
+          <option value="Списано">Списано</option>
+          <option value="Не на своём МХ">Не на своём МХ</option>
+          <option value="Хлам">Хлам</option>
+          <option value="ШК">ШК</option>
+        </select>
       </div>
 
       <!-- Таблица -->
@@ -102,13 +183,15 @@
         <table class="table table-bordered table-striped align-middle" id="dataTable">
           <thead class="table-light">
             <tr>
-              <th>✔</th>
-              <th>place_name</th>
+              <th width="40">✔</th>
+              <th>place_cod</th>
               <th>Паллет</th>
               <th>Баркод</th>
-              <th>Количество ШК</th>
               <th>Статус</th>
-              <th>Действия</th>
+              <th>Актуальный статус</th>
+              <th>ФИО</th>
+              <th>Блок</th>
+              <th>Дата</th>
             </tr>
           </thead>
           <tbody id="results"></tbody>
@@ -122,12 +205,15 @@
   let allRows = [];
   let displayedRows = [];
   let hasUnsavedChanges = false;
+  let currentUser = null;
 
-  const COLUMNS = ['place_name', 'Паллет', 'Баркод', 'Количество ШК', 'Статус', 'place_cod'];
+  const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
   const STORAGE_KEY = 'excelCheckerData';
+  const USER_STORAGE_KEY = 'excelCheckerUser';
 
   // Инициализация при загрузке страницы
   document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
     loadFromLocalStorage();
     setupBeforeUnloadWarning();
     
@@ -135,10 +221,69 @@
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         search();
-        this.value = ''; // Очищаем поле после поиска
+        this.value = '';
       }
     });
   });
+
+  // Проверка авторизации
+  function checkAuth() {
+    const savedUser = localStorage.getItem(USER_STORAGE_KEY);
+    if (savedUser) {
+      try {
+        currentUser = JSON.parse(savedUser);
+        showMainContent();
+      } catch (e) {
+        showAuthModal();
+      }
+    } else {
+      showAuthModal();
+    }
+  }
+
+  // Показать модальное окно авторизации
+  function showAuthModal() {
+    document.getElementById('authModal').style.display = 'block';
+    document.getElementById('userFio').focus();
+  }
+
+  // Скрыть модальное окно авторизации
+  function hideAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+  }
+
+  // Показать основной контент
+  function showMainContent() {
+    document.getElementById('mainContent').style.display = 'flex';
+    document.getElementById('userInfo').textContent = `${currentUser.fio} (Блок ${currentUser.block})`;
+    document.getElementById('searchInput').focus();
+  }
+
+  // Вход в систему
+  function login() {
+    const fio = document.getElementById('userFio').value.trim();
+    const block = document.getElementById('userBlock').value.trim();
+    
+    if (!fio || !block) {
+      alert('Пожалуйста, заполните все поля');
+      return;
+    }
+    
+    currentUser = { fio, block };
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser));
+    hideAuthModal();
+    showMainContent();
+  }
+
+  // Выход из системы
+  function logout() {
+    if (confirm('Вы уверены, что хотите выйти?')) {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      currentUser = null;
+      document.getElementById('mainContent').style.display = 'none';
+      showAuthModal();
+    }
+  }
 
   // Загрузка данных из localStorage
   function loadFromLocalStorage() {
@@ -148,10 +293,9 @@
         const parsedData = JSON.parse(savedData);
         if (Array.isArray(parsedData)) {
           allRows = parsedData;
-          console.log('Данные успешно загружены из localStorage');
         }
       } catch (e) {
-        console.error('Ошибка при загрузке данных из localStorage:', e);
+        console.error('Ошибка при загрузке данных:', e);
       }
     }
   }
@@ -161,24 +305,12 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
       hasUnsavedChanges = false;
-      console.log('Данные сохранены в localStorage');
     } catch (e) {
-      console.error('Ошибка при сохранении в localStorage:', e);
+      console.error('Ошибка при сохранении данных:', e);
     }
   }
 
-  // Очистка всех данных
-  function clearAllData() {
-    if (confirm('Вы уверены, что хотите удалить все данные? Это действие нельзя отменить.')) {
-      allRows = [];
-      displayedRows = [];
-      localStorage.removeItem(STORAGE_KEY);
-      renderTable();
-      alert('Все данные удалены');
-    }
-  }
-
-  // Предупреждение при закрытии/обновлении страницы
+  // Предупреждение при закрытии страницы
   function setupBeforeUnloadWarning() {
     window.addEventListener('beforeunload', (e) => {
       if (hasUnsavedChanges) {
@@ -189,13 +321,13 @@
     });
   }
 
-  // Загрузка XLSX файла
+  // Загрузка файла Excel
   document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
     const reader = new FileReader();
-    reader.onload = function (event) {
+    reader.onload = function(event) {
       try {
         const data = new Uint8Array(event.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -205,29 +337,25 @@
         const indices = COLUMNS.map(col => header.indexOf(col));
         
         const newRows = rows.slice(1).map((row, index) => ({
-          values: indices.map(i => row[i] || ''),
+          place_cod: row[indices[0]] || '',
+          pallet: row[indices[1]] || '',
+          barcode: row[indices[2]] || '',
+          status: row[indices[3]] || '',
+          actual_status: '',
+          fio: currentUser.fio,
+          block: currentUser.block,
+          date: new Date().toLocaleString(),
           id: allRows.length + index,
-          selected: false,
-          status: row[header.indexOf('Статус')] || ''
+          selected: false
         }));
         
-        // Добавляем только новые строки, которых еще нет
-        const existingBarcodes = new Set(allRows.map(r => r.values[2]));
-        const uniqueNewRows = newRows.filter(row => !existingBarcodes.has(row.values[2]));
-        
-        if (uniqueNewRows.length > 0) {
-          allRows = [...allRows, ...uniqueNewRows];
-          hasUnsavedChanges = true;
-          saveToLocalStorage();
-          alert(`Добавлено ${uniqueNewRows.length} новых строк из файла`);
-        } else {
-          alert('Все строки из файла уже есть в таблице');
-        }
-        
+        allRows = [...allRows, ...newRows];
+        hasUnsavedChanges = true;
+        saveToLocalStorage();
         search();
       } catch (error) {
         console.error('Ошибка при обработке файла:', error);
-        alert('Произошла ошибка при обработке файла. Проверьте формат файла.');
+        alert('Ошибка при чтении файла. Проверьте формат.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -235,48 +363,57 @@
 
   // Добавление строки
   function addRow() {
-    const input = document.getElementById('addRowInput');
-    const text = input.value.trim();
-    if (!text) return;
+    const placeCod = document.getElementById('addPlaceCod').value.trim();
+    const pallet = document.getElementById('addPallet').value.trim();
+    const barcode = document.getElementById('addBarcode').value.trim();
+    const status = document.getElementById('addStatus').value;
     
-    const values = text.split(',').map(s => s.trim());
-    while (values.length < 5) values.push('');
-    
-    // Проверяем, есть ли уже строка с таким баркодом
-    const barcode = values[2];
-    const exists = allRows.some(row => row.values[2] === barcode);
-    
-    if (exists) {
-      alert('Строка с таким баркодом уже существует');
+    if (!placeCod || !pallet || !barcode || !status) {
+      alert('Пожалуйста, заполните все поля');
       return;
     }
     
     allRows.push({
-      values,
+      place_cod: placeCod,
+      pallet: pallet,
+      barcode: barcode,
+      status: status,
+      actual_status: '',
+      fio: currentUser.fio,
+      block: currentUser.block,
+      date: new Date().toLocaleString(),
       id: allRows.length,
-      selected: false,
-      status: values[4] || ''
+      selected: false
     });
     
-    input.value = '';
+    // Очищаем поля ввода
+    document.getElementById('addPlaceCod').value = '';
+    document.getElementById('addPallet').value = '';
+    document.getElementById('addBarcode').value = '';
+    document.getElementById('addStatus').value = '';
+    
     hasUnsavedChanges = true;
     saveToLocalStorage();
     search();
+    document.getElementById('addPlaceCod').focus();
   }
 
   // Поиск
   function search() {
-    const termRaw = document.getElementById('searchInput').value.trim();
-    const digitsOnly = termRaw.replace(/\D/g, '');
-
+    const term = document.getElementById('searchInput').value.trim();
+    const digitsOnly = term.replace(/\D/g, '');
+    
     displayedRows = allRows.filter(row => {
       if (!digitsOnly) return false;
-      return row.values.some(val => {
-        const num = (val || '').toString().replace(/\D/g, '');
-        return num.includes(digitsOnly);
+      return Object.values(row).some(val => {
+        if (typeof val === 'string' || typeof val === 'number') {
+          const num = val.toString().replace(/\D/g, '');
+          return num.includes(digitsOnly);
+        }
+        return false;
       });
     }).slice(0, 100);
-
+    
     renderTable();
   }
 
@@ -287,7 +424,7 @@
     
     if (displayedRows.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="7" class="text-center text-muted">Нет данных для отображения</td>`;
+      tr.innerHTML = `<td colspan="9" class="text-center text-muted">Нет данных для отображения</td>`;
       body.appendChild(tr);
       return;
     }
@@ -295,86 +432,75 @@
     displayedRows.forEach((row, i) => {
       const tr = document.createElement('tr');
       const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
-      const cells = row.values.slice(0, 5).map((val, colIdx) =>
-        `<td><textarea rows="1" onchange="editCell(${i}, ${colIdx}, this.value)">${val}</textarea></td>`
-      );
-      const status = `<td><span id="status-${i}" class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`;
-      const actions = `
-        <td>
-          <button class="btn btn-sm btn-outline-success me-1" onclick="markStatus(${i}, 'Актуально')">Актуально</button>
-          <button class="btn btn-sm btn-outline-danger me-1" onclick="markStatus(${i}, 'Неактуально')">Неактуально</button>
-          <button class="btn btn-sm btn-outline-warning" onclick="markStatus(${i}, 'Изменить')">Изменить</button>
-        </td>`;
-      tr.innerHTML = checkbox + cells.join('') + status + actions;
+      
+      const cells = [
+        `<td>${row.place_cod}</td>`,
+        `<td>${row.pallet}</td>`,
+        `<td>${row.barcode}</td>`,
+        `<td><span class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`,
+        `<td><span class="badge text-bg-${statusColor(row.actual_status)}">${row.actual_status || '—'}</span></td>`,
+        `<td>${row.fio}</td>`,
+        `<td>${row.block}</td>`,
+        `<td>${row.date}</td>`
+      ];
+      
+      tr.innerHTML = checkbox + cells.join('');
       body.appendChild(tr);
     });
   }
 
-  // Цвет для статуса
+  // Цвет статуса
   function statusColor(status) {
-    return status === 'Актуально' ? 'success' :
-           status === 'Неактуально' ? 'danger' :
-           status === 'Изменить' ? 'warning' : 'secondary';
+    switch(status) {
+      case 'Совпадает': return 'success';
+      case 'Буфер': return 'primary';
+      case 'Списано': return 'danger';
+      case 'Не на своём МХ': return 'warning';
+      case 'Хлам': return 'secondary';
+      case 'ШК': return 'info';
+      default: return 'light';
+    }
   }
 
   // Выбор строки
   function toggleSelect(index) {
     displayedRows[index].selected = !displayedRows[index].selected;
-    // Находим соответствующую строку в allRows и обновляем ее
-    const displayedRow = displayedRows[index];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
+    const allRowIndex = allRows.findIndex(r => r.id === displayedRows[index].id);
     if (allRowIndex !== -1) {
-      allRows[allRowIndex].selected = displayedRow.selected;
+      allRows[allRowIndex].selected = displayedRows[index].selected;
       hasUnsavedChanges = true;
       saveToLocalStorage();
     }
   }
 
-  // Изменение статуса (с автоматической установкой галочки)
-  function markStatus(index, status) {
-    // Обновляем отображаемую строку
-    displayedRows[index].status = status;
-    displayedRows[index].values[4] = status;
-    displayedRows[index].selected = true; // Галочка ставится автоматически
+  // Применение статуса к выбранным строкам
+  function applyStatusToSelected() {
+    const select = document.getElementById('statusSelect');
+    const status = select.value;
+    if (!status) return;
     
-    // Обновляем DOM
-    document.getElementById(`status-${index}`).innerText = status;
-    document.getElementById(`status-${index}`).className = 'badge text-bg-' + statusColor(status);
+    displayedRows.forEach((row, index) => {
+      if (row.selected) {
+        row.actual_status = status;
+        
+        const allRowIndex = allRows.findIndex(r => r.id === row.id);
+        if (allRowIndex !== -1) {
+          allRows[allRowIndex].actual_status = status;
+          allRows[allRowIndex].fio = currentUser.fio;
+          allRows[allRowIndex].block = currentUser.block;
+          allRows[allRowIndex].date = new Date().toLocaleString();
+        }
+      }
+    });
     
-    // Находим checkbox и ставим галочку
-    const row = document.getElementById('results').children[index];
-    if (row) {
-      const checkbox = row.querySelector('input[type="checkbox"]');
-      if (checkbox) checkbox.checked = true;
-    }
-    
-    // Обновляем основную таблицу
-    const displayedRow = displayedRows[index];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].status = status;
-      allRows[allRowIndex].values[4] = status;
-      allRows[allRowIndex].selected = true;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
+    select.value = '';
+    hasUnsavedChanges = true;
+    saveToLocalStorage();
+    renderTable();
+    document.getElementById('searchInput').focus();
   }
 
-  // Редактирование ячейки
-  function editCell(rowIndex, colIndex, value) {
-    displayedRows[rowIndex].values[colIndex] = value;
-    
-    // Обновляем основную таблицу
-    const displayedRow = displayedRows[rowIndex];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].values[colIndex] = value;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
-  }
-
-  // Сохранение всех строк с галочками
+  // Сохранение выбранных строк
   function saveSelected() {
     const selected = allRows.filter(row => row.selected);
     if (selected.length === 0) {
@@ -382,24 +508,44 @@
       return;
     }
     
-    const csv = [COLUMNS.slice(0, 5).join(',')].concat(
-      selected.map(row => row.values.slice(0, 5).join(','))
+    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
+    const csv = [headers.join(',')].concat(
+      selected.map(row => [
+        row.place_cod,
+        row.pallet,
+        row.barcode,
+        row.status,
+        row.actual_status,
+        row.fio,
+        row.block,
+        row.date
+      ].join(','))
     ).join('\n');
     
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `selected_rows_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `selected_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     
-    // Снимаем выделение после сохранения
     allRows.forEach(row => row.selected = false);
     displayedRows.forEach(row => row.selected = false);
     hasUnsavedChanges = true;
     saveToLocalStorage();
     renderTable();
+    document.getElementById('searchInput').focus();
+  }
+
+  // Очистка всех данных
+  function clearAllData() {
+    if (confirm('Вы уверены, что хотите удалить все данные?')) {
+      allRows = [];
+      displayedRows = [];
+      localStorage.removeItem(STORAGE_KEY);
+      renderTable();
+      document.getElementById('searchInput').focus();
+    }
   }
 </script>
-
 </body>
 </html>
