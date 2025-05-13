@@ -91,9 +91,21 @@
     .add-row-input {
       margin-bottom: 5px;
     }
+    .offline-alert {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: none;
+    }
   </style>
 </head>
 <body>
+
+<!-- Офлайн-уведомление -->
+<div class="alert alert-warning offline-alert" id="offlineAlert">
+  Приложение работает в офлайн-режиме. Данные будут сохранены локально.
+</div>
 
 <!-- Модальное окно авторизации -->
 <div id="authModal" class="auth-modal">
@@ -131,7 +143,7 @@
       <div class="input-group mb-3">
         <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
         <button class="btn btn-primary" onclick="search()">Поиск</button>
-        <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
+        <button class="btn btn-success" onclick="saveSelected()">Сохранить в файл</button>
         <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
       </div>
 
@@ -191,7 +203,7 @@
               <th>Актуальный статус</th>
               <th>ФИО</th>
               <th>Блок</th>
-              <th>Дата</th>
+              <th>Дата изменения</th>
             </tr>
           </thead>
           <tbody id="results"></tbody>
@@ -206,13 +218,18 @@
   let displayedRows = [];
   let hasUnsavedChanges = false;
   let currentUser = null;
+  let isOnline = navigator.onLine;
 
   const COLUMNS = ['place_cod', 'Паллет', 'Баркод', 'Статус'];
-  const STORAGE_KEY = 'excelCheckerData';
-  const USER_STORAGE_KEY = 'excelCheckerUser';
+  const STORAGE_KEY = 'excelCheckerData_v2';
+  const USER_STORAGE_KEY = 'excelCheckerUser_v2';
 
   // Инициализация при загрузке страницы
   document.addEventListener('DOMContentLoaded', () => {
+    checkOnlineStatus();
+    window.addEventListener('online', checkOnlineStatus);
+    window.addEventListener('offline', checkOnlineStatus);
+    
     checkAuth();
     loadFromLocalStorage();
     setupBeforeUnloadWarning();
@@ -225,6 +242,13 @@
       }
     });
   });
+
+  // Проверка статуса подключения
+  function checkOnlineStatus() {
+    isOnline = navigator.onLine;
+    const offlineAlert = document.getElementById('offlineAlert');
+    offlineAlert.style.display = isOnline ? 'none' : 'block';
+  }
 
   // Проверка авторизации
   function checkAuth() {
@@ -277,7 +301,7 @@
 
   // Выход из системы
   function logout() {
-    if (confirm('Вы уверены, что хотите выйти?')) {
+    if (confirm('Вы уверены, что хотите выйти? Все данные останутся сохраненными.')) {
       localStorage.removeItem(USER_STORAGE_KEY);
       currentUser = null;
       document.getElementById('mainContent').style.display = 'none';
@@ -287,16 +311,17 @@
 
   // Загрузка данных из localStorage
   function loadFromLocalStorage() {
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    if (savedData) {
-      try {
+    try {
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      if (savedData) {
         const parsedData = JSON.parse(savedData);
         if (Array.isArray(parsedData)) {
           allRows = parsedData;
+          console.log('Данные успешно загружены из localStorage');
         }
-      } catch (e) {
-        console.error('Ошибка при загрузке данных:', e);
       }
+    } catch (e) {
+      console.error('Ошибка при загрузке данных:', e);
     }
   }
 
@@ -305,8 +330,10 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
       hasUnsavedChanges = false;
+      console.log('Данные сохранены в localStorage');
     } catch (e) {
       console.error('Ошибка при сохранении данных:', e);
+      alert('Ошибка при сохранении данных. Возможно, закончилось место в хранилище.');
     }
   }
 
@@ -345,14 +372,23 @@
           fio: currentUser.fio,
           block: currentUser.block,
           date: new Date().toLocaleString(),
-          id: allRows.length + index,
+          id: Date.now() + index, // Уникальный ID на основе времени
           selected: false
         }));
         
-        allRows = [...allRows, ...newRows];
-        hasUnsavedChanges = true;
-        saveToLocalStorage();
-        search();
+        // Добавляем только новые уникальные записи
+        const existingBarcodes = new Set(allRows.map(r => r.barcode));
+        const uniqueNewRows = newRows.filter(row => !existingBarcodes.has(row.barcode));
+        
+        if (uniqueNewRows.length > 0) {
+          allRows = [...allRows, ...uniqueNewRows];
+          hasUnsavedChanges = true;
+          saveToLocalStorage();
+          alert(`Добавлено ${uniqueNewRows.length} новых записей из файла`);
+          search();
+        } else {
+          alert('Все записи из файла уже есть в таблице');
+        }
       } catch (error) {
         console.error('Ошибка при обработке файла:', error);
         alert('Ошибка при чтении файла. Проверьте формат.');
@@ -373,7 +409,14 @@
       return;
     }
     
-    allRows.push({
+    // Проверяем, есть ли уже запись с таким баркодом
+    const exists = allRows.some(row => row.barcode === barcode);
+    if (exists) {
+      alert('Запись с таким баркодом уже существует');
+      return;
+    }
+    
+    const newRow = {
       place_cod: placeCod,
       pallet: pallet,
       barcode: barcode,
@@ -382,9 +425,11 @@
       fio: currentUser.fio,
       block: currentUser.block,
       date: new Date().toLocaleString(),
-      id: allRows.length,
+      id: Date.now(), // Уникальный ID на основе времени
       selected: false
-    });
+    };
+    
+    allRows.push(newRow);
     
     // Очищаем поля ввода
     document.getElementById('addPlaceCod').value = '';
@@ -479,6 +524,8 @@
     const status = select.value;
     if (!status) return;
     
+    let updatedCount = 0;
+    
     displayedRows.forEach((row, index) => {
       if (row.selected) {
         row.actual_status = status;
@@ -489,6 +536,7 @@
           allRows[allRowIndex].fio = currentUser.fio;
           allRows[allRowIndex].block = currentUser.block;
           allRows[allRowIndex].date = new Date().toLocaleString();
+          updatedCount++;
         }
       }
     });
@@ -498,9 +546,15 @@
     saveToLocalStorage();
     renderTable();
     document.getElementById('searchInput').focus();
+    
+    if (updatedCount > 0) {
+      alert(`Обновлено ${updatedCount} записей`);
+    } else {
+      alert('Не выбрано ни одной записи для обновления');
+    }
   }
 
-  // Сохранение выбранных строк
+  // Сохранение выбранных строк в файл
   function saveSelected() {
     const selected = allRows.filter(row => row.selected);
     if (selected.length === 0) {
@@ -508,42 +562,42 @@
       return;
     }
     
-    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата'];
+    const headers = ['place_cod', 'Паллет', 'Баркод', 'Статус', 'Актуальный статус', 'ФИО', 'Блок', 'Дата изменения'];
     const csv = [headers.join(',')].concat(
       selected.map(row => [
-        row.place_cod,
-        row.pallet,
-        row.barcode,
-        row.status,
-        row.actual_status,
-        row.fio,
-        row.block,
-        row.date
+        `"${row.place_cod}"`,
+        `"${row.pallet}"`,
+        `"${row.barcode}"`,
+        `"${row.status}"`,
+        `"${row.actual_status}"`,
+        `"${row.fio}"`,
+        `"${row.block}"`,
+        `"${row.date}"`
       ].join(','))
     ).join('\n');
     
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `selected_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     
+    // Снимаем выделение после сохранения
     allRows.forEach(row => row.selected = false);
     displayedRows.forEach(row => row.selected = false);
     hasUnsavedChanges = true;
     saveToLocalStorage();
     renderTable();
-    document.getElementById('searchInput').focus();
   }
 
   // Очистка всех данных
   function clearAllData() {
-    if (confirm('Вы уверены, что хотите удалить все данные?')) {
+    if (confirm('Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить.')) {
       allRows = [];
       displayedRows = [];
       localStorage.removeItem(STORAGE_KEY);
       renderTable();
-      document.getElementById('searchInput').focus();
+      alert('Все данные были удалены');
     }
   }
 </script>
