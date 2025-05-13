@@ -1,405 +1,54 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, height=device-height">
-  <title>Проверка Паллет</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    body {
-      padding: 0;
-      margin: 0;
-      background-color: #f8f9fa;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      height: 100vh;
-    }
-    .container {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-    }
-    .card {
-      flex: 1;
-      margin: 20px;
-      overflow: hidden;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    }
-    th, td {
-      white-space: nowrap;
-      font-size: 1em;
-    }
-    .input-group {
-      margin-bottom: 20px;
-    }
-    input, button {
-      font-size: 1em;
-    }
-    .table th {
-      background-color: #007bff;
-      color: white;
-    }
-    .table-striped tbody tr:nth-of-type(odd) {
-      background-color: #f1f1f1;
-    }
-    .table td, .table th {
-      padding: 12px;
-      text-align: center;
-    }
-    .table th {
-      border-top: 2px solid #007bff;
-      border-bottom: 2px solid #007bff;
-    }
-    .table td {
-      border-bottom: 1px solid #dee2e6;
-    }
-    .table-responsive {
-      overflow-y: auto;
-      height: 60vh;
-    }
-    @media (max-width: 576px) {
-      th, td { font-size: 0.9em; }
-    }
-    textarea {
-      width: 100%;
-      border: none;
-      background: transparent;
-      resize: none;
-      overflow: hidden;
-    }
-  </style>
-</head>
-<body>
+import openpyxl
+import requests
+import json
 
-<div class="container">
-  <div class="card">
-    <div class="card-body">
-      <h3 class="mb-4 text-center">Проверка Excel-файла</h3>
-      <p class="text-center">Загрузите файл и ищите по значениям из таблицы</p>
+# Настройки
+EXCEL_FILE = 'Книга1202.xlsx'  # Укажите путь к вашему файлу Excel
+SHEET_NAME = 'Лист1'          # Укажите название листа
+API_URL = "https://wms.wbwh.tech/srv/wms_front_wbstorenv_place_info_api_proxy_adapter/api/storage_places/by_name_and_office"
+API_TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJlbXBsb3llZV9pZCI6IjI5NzM2MSIsImV4cCI6MTc0NzA1ODA0NSwiaWF0IjoxNzQ3MDUwODMwLCJwaG9uZSI6IiIsInNlc3Npb25faWQiOiI1MTY2Mzk2My1jMWQ2LTRlYzQtNjA3OS0wZGUyM2M2YTllY2YifQ.nfPBbz6dd-qJ8-_6kZc1-DSecFMvlVDx2gxOsPO6ruI8Ey6jtOqL03YScSEoTYDk34qMN4AMlsAnZJ7ojVMplGpFh8sA2FTWZ2WrxpSt_QQAjJTviNFlwp-Nwq2NA1XKIojbJpdmmjCg6JzUZOgMOC-qmtLaJwENkLJM84NwokQ"       # Замените на ваш реальный токен
+OFFICE_ID = 507               # ID офиса из вашего примера
 
-      <!-- Форма загрузки файла -->
-      <div class="mb-3">
-        <input type="file" class="form-control" id="fileInput" accept=".xlsx">
-      </div>
-
-      <!-- Поиск -->
-      <div class="input-group mb-3">
-        <input type="text" id="searchInput" class="form-control" placeholder="Поиск по данным...">
-        <button class="btn btn-primary" onclick="search()">Поиск</button>
-        <button class="btn btn-success" onclick="saveSelected()">Сохранить</button>
-        <button class="btn btn-danger" onclick="clearAllData()">Очистить все</button>
-      </div>
-
-      <!-- Добавление строки -->
-      <div class="input-group mb-4">
-        <input type="text" id="addRowInput" class="form-control" placeholder="Добавить строку через запятую">
-        <button class="btn btn-outline-secondary" onclick="addRow()">Добавить</button>
-      </div>
-
-      <!-- Таблица -->
-      <div class="table-responsive">
-        <table class="table table-bordered table-striped align-middle" id="dataTable">
-          <thead class="table-light">
-            <tr>
-              <th>✔</th>
-              <th>place_name</th>
-              <th>Паллет</th>
-              <th>Баркод</th>
-              <th>Количество ШК</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody id="results"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  let allRows = [];
-  let displayedRows = [];
-  let hasUnsavedChanges = false;
-
-  const COLUMNS = ['place_name', 'Паллет', 'Баркод', 'Количество ШК', 'Статус', 'place_cod'];
-  const STORAGE_KEY = 'excelCheckerData';
-
-  // Инициализация при загрузке страницы
-  document.addEventListener('DOMContentLoaded', () => {
-    loadFromLocalStorage();
-    setupBeforeUnloadWarning();
+def получить_place_id(название_места):
+    """Функция для получения place_id из API по названию места"""
+    заголовки = {
+        "Authorization": f"Bearer {API_TOKEN}",
+        "Content-Type": "application/json"
+    }
     
-    // Обработка нажатия Enter в поле поиска
-    document.getElementById('searchInput').addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        search();
-        this.value = ''; // Очищаем поле после поиска
-      }
-    });
-  });
-
-  // Загрузка данных из localStorage
-  function loadFromLocalStorage() {
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        if (Array.isArray(parsedData)) {
-          allRows = parsedData;
-          console.log('Данные успешно загружены из localStorage');
-        }
-      } catch (e) {
-        console.error('Ошибка при загрузке данных из localStorage:', e);
-      }
+    данные = {
+        "place_name": название_места,
+        "office_id": OFFICE_ID
     }
-  }
-
-  // Сохранение данных в localStorage
-  function saveToLocalStorage() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
-      hasUnsavedChanges = false;
-      console.log('Данные сохранены в localStorage');
-    } catch (e) {
-      console.error('Ошибка при сохранении в localStorage:', e);
-    }
-  }
-
-  // Очистка всех данных
-  function clearAllData() {
-    if (confirm('Вы уверены, что хотите удалить все данные? Это действие нельзя отменить.')) {
-      allRows = [];
-      displayedRows = [];
-      localStorage.removeItem(STORAGE_KEY);
-      renderTable();
-      alert('Все данные удалены');
-    }
-  }
-
-  // Предупреждение при закрытии/обновлении страницы
-  function setupBeforeUnloadWarning() {
-    window.addEventListener('beforeunload', (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = 'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу?';
-        return e.returnValue;
-      }
-    });
-  }
-
-  // Загрузка XLSX файла
-  document.getElementById('fileInput').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
     
-    const reader = new FileReader();
-    reader.onload = function (event) {
-      try {
-        const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const header = rows[0];
-        const indices = COLUMNS.map(col => header.indexOf(col));
+    try:
+        ответ = requests.post(API_URL, headers=заголовки, data=json.dumps(данные))
+        ответ.raise_for_status()  # Проверка на ошибки
         
-        const newRows = rows.slice(1).map((row, index) => ({
-          values: indices.map(i => row[i] || ''),
-          id: allRows.length + index,
-          selected: false,
-          status: row[header.indexOf('Статус')] || ''
-        }));
-        
-        // Добавляем только новые строки, которых еще нет
-        const existingBarcodes = new Set(allRows.map(r => r.values[2]));
-        const uniqueNewRows = newRows.filter(row => !existingBarcodes.has(row.values[2]));
-        
-        if (uniqueNewRows.length > 0) {
-          allRows = [...allRows, ...uniqueNewRows];
-          hasUnsavedChanges = true;
-          saveToLocalStorage();
-          alert(`Добавлено ${uniqueNewRows.length} новых строк из файла`);
-        } else {
-          alert('Все строки из файла уже есть в таблице');
-        }
-        
-        search();
-      } catch (error) {
-        console.error('Ошибка при обработке файла:', error);
-        alert('Произошла ошибка при обработке файла. Проверьте формат файла.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
+        результат = ответ.json()
+        if результат.get('data') and len(результат['data']) > 0:
+            return результат['data'][0]['place_id']
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе place_id для {название_места}: {e}")
+        return None
 
-  // Добавление строки
-  function addRow() {
-    const input = document.getElementById('addRowInput');
-    const text = input.value.trim();
-    if (!text) return;
+def обработать_excel_файл():
+    """Основная функция обработки Excel файла"""
+    # Открываем файл Excel
+    книга = openpyxl.load_workbook(EXCEL_FILE)
+    лист = книга[SHEET_NAME]
     
-    const values = text.split(',').map(s => s.trim());
-    while (values.length < 5) values.push('');
+    # Обрабатываем каждую строку в столбце B
+    for строка in лист.iter_rows(min_col=2, max_col=2):  # Столбец B
+        ячейка = строка[0]
+        if ячейка.value:  # Если есть название места
+            place_id = получить_place_id(str(ячейка.value).strip())
+            лист.cell(row=ячейка.row, column=1, value=place_id)  # Записываем в столбец A
     
-    // Проверяем, есть ли уже строка с таким баркодом
-    const barcode = values[2];
-    const exists = allRows.some(row => row.values[2] === barcode);
-    
-    if (exists) {
-      alert('Строка с таким баркодом уже существует');
-      return;
-    }
-    
-    allRows.push({
-      values,
-      id: allRows.length,
-      selected: false,
-      status: values[4] || ''
-    });
-    
-    input.value = '';
-    hasUnsavedChanges = true;
-    saveToLocalStorage();
-    search();
-  }
+    # Сохраняем изменения
+    книга.save(EXCEL_FILE)
+    print("Обработка завершена!")
 
-  // Поиск
-  function search() {
-    const termRaw = document.getElementById('searchInput').value.trim();
-    const digitsOnly = termRaw.replace(/\D/g, '');
-
-    displayedRows = allRows.filter(row => {
-      if (!digitsOnly) return false;
-      return row.values.some(val => {
-        const num = (val || '').toString().replace(/\D/g, '');
-        return num.includes(digitsOnly);
-      });
-    }).slice(0, 100);
-
-    renderTable();
-  }
-
-  // Отображение таблицы
-  function renderTable() {
-    const body = document.getElementById('results');
-    body.innerHTML = '';
-    
-    if (displayedRows.length === 0) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="7" class="text-center text-muted">Нет данных для отображения</td>`;
-      body.appendChild(tr);
-      return;
-    }
-    
-    displayedRows.forEach((row, i) => {
-      const tr = document.createElement('tr');
-      const checkbox = `<td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="toggleSelect(${i})"></td>`;
-      const cells = row.values.slice(0, 5).map((val, colIdx) =>
-        `<td><textarea rows="1" onchange="editCell(${i}, ${colIdx}, this.value)">${val}</textarea></td>`
-      );
-      const status = `<td><span id="status-${i}" class="badge text-bg-${statusColor(row.status)}">${row.status || '—'}</span></td>`;
-      const actions = `
-        <td>
-          <button class="btn btn-sm btn-outline-success me-1" onclick="markStatus(${i}, 'Актуально')">Актуально</button>
-          <button class="btn btn-sm btn-outline-danger me-1" onclick="markStatus(${i}, 'Неактуально')">Неактуально</button>
-          <button class="btn btn-sm btn-outline-warning" onclick="markStatus(${i}, 'Изменить')">Изменить</button>
-        </td>`;
-      tr.innerHTML = checkbox + cells.join('') + status + actions;
-      body.appendChild(tr);
-    });
-  }
-
-  // Цвет для статуса
-  function statusColor(status) {
-    return status === 'Актуально' ? 'success' :
-           status === 'Неактуально' ? 'danger' :
-           status === 'Изменить' ? 'warning' : 'secondary';
-  }
-
-  // Выбор строки
-  function toggleSelect(index) {
-    displayedRows[index].selected = !displayedRows[index].selected;
-    // Находим соответствующую строку в allRows и обновляем ее
-    const displayedRow = displayedRows[index];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].selected = displayedRow.selected;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
-  }
-
-  // Изменение статуса (с автоматической установкой галочки)
-  function markStatus(index, status) {
-    // Обновляем отображаемую строку
-    displayedRows[index].status = status;
-    displayedRows[index].values[4] = status;
-    displayedRows[index].selected = true; // Галочка ставится автоматически
-    
-    // Обновляем DOM
-    document.getElementById(`status-${index}`).innerText = status;
-    document.getElementById(`status-${index}`).className = 'badge text-bg-' + statusColor(status);
-    
-    // Находим checkbox и ставим галочку
-    const row = document.getElementById('results').children[index];
-    if (row) {
-      const checkbox = row.querySelector('input[type="checkbox"]');
-      if (checkbox) checkbox.checked = true;
-    }
-    
-    // Обновляем основную таблицу
-    const displayedRow = displayedRows[index];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].status = status;
-      allRows[allRowIndex].values[4] = status;
-      allRows[allRowIndex].selected = true;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
-  }
-
-  // Редактирование ячейки
-  function editCell(rowIndex, colIndex, value) {
-    displayedRows[rowIndex].values[colIndex] = value;
-    
-    // Обновляем основную таблицу
-    const displayedRow = displayedRows[rowIndex];
-    const allRowIndex = allRows.findIndex(r => r.id === displayedRow.id);
-    if (allRowIndex !== -1) {
-      allRows[allRowIndex].values[colIndex] = value;
-      hasUnsavedChanges = true;
-      saveToLocalStorage();
-    }
-  }
-
-  // Сохранение всех строк с галочками
-  function saveSelected() {
-    const selected = allRows.filter(row => row.selected);
-    if (selected.length === 0) {
-      alert("Нет выбранных строк.");
-      return;
-    }
-    
-    const csv = [COLUMNS.slice(0, 5).join(',')].concat(
-      selected.map(row => row.values.slice(0, 5).join(','))
-    ).join('\n');
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `selected_rows_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    
-    // Снимаем выделение после сохранения
-    allRows.forEach(row => row.selected = false);
-    displayedRows.forEach(row => row.selected = false);
-    hasUnsavedChanges = true;
-    saveToLocalStorage();
-    renderTable();
-  }
-</script>
-
-</body>
-</html>
+if __name__ == "__main__":
+    обработать_excel_файл()
